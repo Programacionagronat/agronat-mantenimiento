@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Historial — Agronat Mantenimiento{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1100px">
+
+  <div style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <h1 style="font-size:20px;color:#1C2B3A;margin-bottom:4px">Historial de Registros</h1>
+      <p style="font-size:13px;color:#6c757d">{{ rows|length }} resultado(s) encontrado(s)</p>
+    </div>
+    <a href="{{ url_for('index') }}" class="btn btn-outline">← Volver al inicio</a>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card" style="padding:18px 24px;margin-bottom:16px">
+    <form method="GET" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px">
+        <label>Equipo</label>
+        <select name="equipo" id="fil-equipo" onchange="this.form.submit()">
+          <option value="">Todos</option>
+          {% for eq in equipos %}
+          <option value="{{ eq }}" {% if filtros.equipo==eq %}selected{% endif %}>{{ eq }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:140px">
+        <label>Frecuencia</label>
+        <select name="frecuencia">
+          <option value="">Todas</option>
+          {% for f in ['Diario','Semanal','Quincenal','Mensual','Pre-Zafra'] %}
+          <option value="{{ f }}" {% if filtros.frecuencia==f %}selected{% endif %}>{{ f }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:130px">
+        <label>Desde</label>
+        <input type="date" name="desde" value="{{ filtros.desde }}">
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:130px">
+        <label>Hasta</label>
+        <input type="date" name="hasta" value="{{ filtros.hasta }}">
+      </div>
+      <button type="submit" class="btn btn-primary">Filtrar</button>
+      <a href="{{ url_for('historial') }}" class="btn btn-outline">Limpiar</a>
+    </form>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card" style="padding:0;overflow:hidden">
+    {% if rows %}
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Equipo</th>
+          <th>Frecuencia</th>
+          <th>Turno</th>
+          <th>Fecha y hora</th>
+          <th>Responsable</th>
+          <th>Observaciones</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set freq_badges = {'Diario':'badge-diario','Semanal':'badge-semanal','Quincenal':'badge-quincenal','Mensual':'badge-mensual','Pre-Zafra':'badge-prezafra'} %}
+        {% for r in rows %}
+        <tr>
+          <td style="color:#aaa;font-size:12px">{{ r.id }}</td>
+          <td style="font-weight:600;color:#1C2B3A">{{ r.equipo }}</td>
+          <td><span class="badge {{ freq_badges.get(r.frecuencia,'') }}">{{ r.frecuencia }}</span></td>
+          <td style="color:#555">{{ r.turno or '—' }}</td>
+          <td style="font-size:13px;color:#555">{{ r.fecha_registro }}</td>
+          <td style="font-size:13px">{{ r.nombre }}</td>
+          <td style="font-size:12px;color:#666;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            {{ r.observaciones or '—' }}
+          </td>
+          <td>
+            <a href="{{ url_for('exportar', reg_id=r.id) }}" class="btn btn-outline btn-sm" title="Descargar PDF">
+              📄 PDF
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div style="text-align:center;padding:48px;color:#aaa">
+      <div style="font-size:36px;margin-bottom:12px">📋</div>
+      <p style="font-size:15px">No se encontraron registros con los filtros seleccionados</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

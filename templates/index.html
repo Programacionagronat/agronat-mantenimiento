@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Inicio — Agronat Mantenimiento{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="margin-bottom:20px">
+    <h1 style="font-size:20px;color:#1C2B3A;margin-bottom:4px">Control de Mantenimiento</h1>
+    <p style="color:#6c757d;font-size:13px">Seleccioná el equipo para completar un checklist</p>
+  </div>
+
+  <div class="grid-3">
+  {% set freq_badges = {
+    'Diario': 'badge-diario',
+    'Semanal': 'badge-semanal',
+    'Quincenal': 'badge-quincenal',
+    'Mensual': 'badge-mensual',
+    'Pre-Zafra': 'badge-prezafra'
+  } %}
+  {% set icons = {
+    'Extrusora': '⚙️',
+    'Prensas de Tornillo': '🔩',
+    'Elevadores de Cangilones': '⬆️',
+    'Sinfines': '🌀',
+    'Bombas de Aceite': '💧',
+    'Enfriador': '❄️',
+    'Prelimpieza': '🧹',
+    'Secadora': '🔥'
+  } %}
+  {% for equipo in equipos %}
+  <div class="equipo-card" onclick="abrirEquipo('{{ equipo }}')">
+    <div class="eq-name">{{ icons.get(equipo,'🔧') }} {{ equipo }}</div>
+    <div class="eq-freqs" id="freqs-{{ loop.index }}">
+      <span style="color:#aaa;font-size:12px">cargando...</span>
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+
+  <div style="margin-top:28px;display:flex;gap:12px">
+    <a href="{{ url_for('historial') }}" class="btn btn-outline">📋 Ver historial de registros</a>
+  </div>
+</div>
+
+<!-- Modal selector de frecuencia -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:28px;width:360px;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+    <h3 style="color:#1C2B3A;margin-bottom:4px" id="modal-equipo-title"></h3>
+    <p style="font-size:12px;color:#6c757d;margin-bottom:18px">Seleccioná la frecuencia del control</p>
+    <div id="modal-freqs" style="display:flex;flex-direction:column;gap:10px"></div>
+    <button onclick="cerrarModal()" class="btn btn-outline" style="margin-top:18px;width:100%">Cancelar</button>
+  </div>
+</div>
+
+<script>
+const freqBadges = { 'Diario':'badge-diario','Semanal':'badge-semanal','Quincenal':'badge-quincenal','Mensual':'badge-mensual','Pre-Zafra':'badge-prezafra' };
+
+// Preload frequencies
+{% for equipo in equipos %}
+fetch('/api/frecuencias/{{ equipo|urlencode }}')
+  .then(r=>r.json()).then(freqs=>{
+    const el = document.getElementById('freqs-{{ loop.index }}');
+    el.innerHTML = freqs.map(f=>`<span class="badge ${freqBadges[f]||''}">${f}</span>`).join('');
+  });
+{% endfor %}
+
+function abrirEquipo(equipo) {
+  document.getElementById('modal-equipo-title').textContent = equipo;
+  fetch('/api/frecuencias/'+encodeURIComponent(equipo))
+    .then(r=>r.json()).then(freqs=>{
+      const cont = document.getElementById('modal-freqs');
+      cont.innerHTML = freqs.map(f=>`
+        <a href="/formulario/${encodeURIComponent(equipo)}/${encodeURIComponent(f)}"
+           class="btn btn-primary" style="justify-content:center">
+          <span class="badge ${freqBadges[f]||''}" style="margin-right:6px">${f}</span>
+          Abrir control ${f.toLowerCase()}
+        </a>`).join('');
+      document.getElementById('modal').style.display='flex';
+    });
+}
+function cerrarModal() { document.getElementById('modal').style.display='none'; }
+document.getElementById('modal').addEventListener('click', e=>{ if(e.target===e.currentTarget) cerrarModal(); });
+</script>
+{% endblock %}

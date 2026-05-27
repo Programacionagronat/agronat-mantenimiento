@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ equipo }} — {{ frecuencia }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1000px">
+
+  <!-- Header info -->
+  <div class="card" style="padding:18px 24px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:#1C2B3A">{{ equipo }}</div>
+        <div style="font-size:12px;color:#6c757d;margin-top:2px">{{ cl.subtitulo }}</div>
+      </div>
+      <span class="badge badge-{{ frecuencia|lower|replace('-','') }}" style="font-size:13px;padding:5px 14px">{{ frecuencia }}</span>
+    </div>
+  </div>
+
+  <!-- Meta fields -->
+  <div class="card" style="padding:18px 24px;margin-bottom:16px">
+    <div class="grid-3" style="gap:14px">
+      <div class="form-group" style="margin:0">
+        <label>Fecha</label>
+        <input type="date" id="meta-fecha" value="{{ now_date }}">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Turno</label>
+        <select id="meta-turno">
+          <option value="">— Sin turno —</option>
+          <option>Día</option>
+          <option>Noche</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div class="progress-bar"><div class="fill" id="progress-fill" style="width:0%"></div></div>
+        <div class="progress-info" id="progress-text">0 de {{ cl.tareas|length }} tareas completadas</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checklist table -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="cl-table">
+      <thead>
+        <tr>
+          <th style="width:50%">TAREA</th>
+          {% for label in cl.col_labels %}
+          <th style="width:{% if cl.columnas[0]=='turno_dia' %}10%{% else %}9%{% endif %}">{{ label }}</th>
+          {% endfor %}
+          <th>OBSERVACIONES</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if cl.get('loto') %}
+        <tr class="loto-row">
+          <td><span class="tarea-text">⚠ LOTO — cortar térmica + candado personal + tarjeta EN MANTENIMIENTO</span></td>
+          {% if cl.columnas[0] == 'turno_dia' %}
+          <td class="center"><input type="checkbox" data-id="__loto__" data-col="turno_dia" onchange="update()"></td>
+          <td class="center"><input type="checkbox" data-id="__loto__" data-col="turno_noche" onchange="update()"></td>
+          {% else %}
+          <td class="center"><input type="text" class="date-input" data-id="__loto__" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
+          <td class="center"><input type="checkbox" data-id="__loto__" data-col="ok" onchange="update()"></td>
+          {% endif %}
+          <td><input type="text" class="obs-input" data-id="__loto__" data-col="obs" placeholder="Obligatorio antes de toda tarea" oninput="update()"></td>
+        </tr>
+        {% endif %}
+
+        {% for t in cl.tareas %}
+        <tr>
+          <td><span class="tarea-text">{{ t.tarea }}</span></td>
+          {% if cl.columnas[0] == 'turno_dia' %}
+          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="turno_dia" onchange="update()"></td>
+          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="turno_noche" onchange="update()"></td>
+          {% else %}
+          <td class="center"><input type="text" class="date-input" data-id="{{ t.id }}" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
+          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="ok" onchange="update()"></td>
+          {% endif %}
+          <td><input type="text" class="obs-input" data-id="{{ t.id }}" data-col="obs" placeholder="{{ t.get('obs','') }}" oninput="update()"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Observaciones generales -->
+  <div class="card" style="margin-top:16px">
+    <label>OBSERVACIONES GENERALES</label>
+    <textarea id="obs-generales" rows="3" placeholder="Anotá cualquier novedad, anomalía o acción tomada..."></textarea>
+  </div>
+
+  <div class="save-bar-pad"></div>
+</div>
+
+<!-- Save bar -->
+<div class="save-bar">
+  <div class="info">
+    <strong>{{ equipo }}</strong> · {{ frecuencia }}
+    <span id="save-status" style="margin-left:12px;color:#90c4e8"></span>
+  </div>
+  <div style="display:flex;gap:10px">
+    <a href="{{ url_for('index') }}" class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,.3)">← Volver</a>
+    <button class="btn btn-success" onclick="guardar()">💾 Guardar registro</button>
+  </div>
+</div>
+
+<div id="toast" style="display:none;position:fixed;top:20px;right:20px;background:#198754;color:white;padding:14px 20px;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:999;font-size:14px;font-weight:500"></div>
+
+<script>
+const EQUIPO = {{ equipo|tojson }};
+const FRECUENCIA = {{ frecuencia|tojson }};
+const TOTAL = {{ cl.tareas|length }};
+
+function collectData() {
+  const tareas = {};
+  document.querySelectorAll('[data-id]').forEach(el => {
+    const id = el.dataset.id;
+    const col = el.dataset.col;
+    if (!tareas[id]) tareas[id] = {};
+    if (el.type === 'checkbox') tareas[id][col] = el.checked;
+    else tareas[id][col] = el.value;
+  });
+  return tareas;
+}
+
+function countCompleted(data) {
+  let done = 0;
+  {% for t in cl.tareas %}
+  {
+    const td = data['{{ t.id }}'] || {};
+    {% if cl.columnas[0] == 'turno_dia' %}
+    if (td.turno_dia || td.turno_noche) done++;
+    {% else %}
+    if (td.ok || td.fecha) done++;
+    {% endif %}
+  }
+  {% endfor %}
+  return done;
+}
+
+function update() {
+  const data = collectData();
+  const done = countCompleted(data);
+  const pct = Math.round(done/TOTAL*100);
+  document.getElementById('progress-fill').style.width = pct+'%';
+  document.getElementById('progress-text').textContent = done+' de '+TOTAL+' tareas completadas';
+}
+
+function toast(msg, color='#198754') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.background = color; t.style.display = 'block';
+  setTimeout(()=>t.style.display='none', 3000);
+}
+
+function guardar() {
+  const tareas = collectData();
+  const payload = {
+    equipo: EQUIPO,
+    frecuencia: FRECUENCIA,
+    turno: document.getElementById('meta-turno').value,
+    observaciones: document.getElementById('obs-generales').value,
+    tareas
+  };
+  document.getElementById('save-status').textContent = 'Guardando...';
+  fetch('/guardar', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok) {
+      toast('✓ Registro guardado correctamente');
+      document.getElementById('save-status').textContent = '✓ Guardado ' + new Date().toLocaleTimeString('es-UY');
+    }
+  }).catch(()=>{ toast('Error al guardar','#dc3545'); document.getElementById('save-status').textContent=''; });
+}
+
+// Set today
+document.getElementById('meta-fecha').value = new Date().toISOString().slice(0,10);
+</script>
+{% endblock %}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Agronat — Ingresar</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #1C2B3A; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.login-box { background: white; border-radius: 14px; padding: 40px 36px; width: 360px; box-shadow: 0 8px 40px rgba(0,0,0,.4); }
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo h1 { font-size: 22px; color: #1C2B3A; font-weight: 800; letter-spacing: .5px; }
+.login-logo p { font-size: 12px; color: #6c757d; margin-top: 4px; }
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 11px; font-weight: 700; color: #6c757d; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+input { width: 100%; padding: 11px 14px; border: 1.5px solid #d0dae5; border-radius: 7px; font-size: 14px; transition: border .15s; }
+input:focus { outline: none; border-color: #2E4A62; box-shadow: 0 0 0 3px rgba(46,74,98,.12); }
+.btn { width: 100%; padding: 12px; background: #1C2B3A; color: white; border: none; border-radius: 7px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background .15s; }
+.btn:hover { background: #2E4A62; }
+.alert { padding: 10px 14px; background: #f8d7da; color: #58151c; border-radius: 6px; font-size: 13px; margin-bottom: 16px; border: 1px solid #f1aeb5; }
+.footer-note { text-align: center; font-size: 11px; color: #aaa; margin-top: 20px; }
+</style>
+</head>
+<body>
+<div class="login-box">
+  <div class="login-logo">
+    <h1>AGRONAT S.A.</h1>
+    <p>Sistema de Control de Mantenimiento</p>
+  </div>
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+  <form method="POST">
+    <div class="form-group">
+      <label>Usuario</label>
+      <input type="text" name="username" autofocus autocomplete="username" required>
+    </div>
+    <div class="form-group">
+      <label>Contraseña</label>
+      <input type="password" name="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn">Ingresar</button>
+  </form>
+  <p class="footer-note">Planta Ruta 12 y Ruta 7 — Uruguay</p>
+</div>
+</body>
+</html>
