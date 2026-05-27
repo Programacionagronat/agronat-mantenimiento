@@ -122,6 +122,7 @@ textarea { resize: vertical; min-height: 80px; }
     <span class="user">{{ session.get('nombre','') }}</span>
     <div class="nav-links">
       <a href="{{ url_for('index') }}">Inicio</a>
+      <a href="{{ url_for('fallas') }}" style="background:rgba(220,53,69,.25);color:#ff8fa3;font-weight:600">🔴 Fallas</a>
       <a href="{{ url_for('historial') }}">Historial</a>
       {% if session.get('username') == 'admin' %}
       <a href="{{ url_for('admin_usuarios') }}">Usuarios</a>
