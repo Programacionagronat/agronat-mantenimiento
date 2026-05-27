@@ -76,6 +76,20 @@ def init_db():
                 datos TEXT NOT NULL,
                 observaciones TEXT
             )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS fallas (
+                id SERIAL PRIMARY KEY,
+                equipo TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                urgencia TEXT NOT NULL,
+                estado TEXT NOT NULL DEFAULT 'Abierto',
+                foto_data TEXT,
+                foto_mime TEXT,
+                fecha_reporte TEXT NOT NULL,
+                usuario_id INTEGER NOT NULL,
+                fecha_actualizacion TEXT,
+                usuario_accion_id INTEGER,
+                comentario_accion TEXT
+            )""")
             conn.commit()
         except Exception:
             conn.rollback()
@@ -103,6 +117,20 @@ def init_db():
                 usuario_id INTEGER NOT NULL,
                 datos TEXT NOT NULL,
                 observaciones TEXT
+            );
+            CREATE TABLE IF NOT EXISTS fallas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                equipo TEXT NOT NULL,
+                descripcion TEXT NOT NULL,
+                urgencia TEXT NOT NULL,
+                estado TEXT NOT NULL DEFAULT 'Abierto',
+                foto_data TEXT,
+                foto_mime TEXT,
+                fecha_reporte TEXT NOT NULL,
+                usuario_id INTEGER NOT NULL,
+                fecha_actualizacion TEXT,
+                usuario_accion_id INTEGER,
+                comentario_accion TEXT
             );
         """)
         conn.commit()
@@ -604,7 +632,9 @@ def logout():
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html", equipos=list(CHECKLISTS.keys()))
+    r = query("SELECT COUNT(*) as n FROM fallas WHERE estado='Abierto'", one=True)
+    fallas_count = r["n"] if r else 0
+    return render_template("index.html", equipos=list(CHECKLISTS.keys()), fallas_count=fallas_count)
 
 @app.route("/formulario/<equipo>/<frecuencia>")
 @login_required
@@ -721,6 +751,85 @@ def generar_pdf(row, cl, datos):
     ft.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),("BACKGROUND",(0,0),(-1,-1),C_ALT),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6)]))
     story.append(ft)
     doc.build(story); buf.seek(0); return buf
+
+# ── FALLAS ───────────────────────────────────────────────────────────────────
+import base64
+
+URGENCIAS = [
+    ("Alta",   "🔴", "#dc3545", "Parada de línea o riesgo inminente"),
+    ("Media",  "🟡", "#fd7e14", "Puede seguir operando pero requiere atención pronta"),
+    ("Baja",   "🟢", "#198754", "Sin impacto inmediato en producción"),
+]
+ESTADOS = ["Abierto", "En proceso", "Resuelto"]
+
+@app.route("/fallas")
+@login_required
+def fallas():
+    estado_fil = request.args.get("estado", "")
+    equipo_fil = request.args.get("equipo", "")
+    q = """SELECT f.*, u.nombre as nombre_reporta
+           FROM fallas f JOIN usuarios u ON f.usuario_id=u.id
+           WHERE 1=1"""
+    params = []
+    if estado_fil:
+        q += " AND f.estado=?"; params.append(estado_fil)
+    if equipo_fil:
+        q += " AND f.equipo=?"; params.append(equipo_fil)
+    q += " ORDER BY CASE f.estado WHEN 'Abierto' THEN 0 WHEN 'En proceso' THEN 1 ELSE 2 END, f.fecha_reporte DESC"
+    rows = query(q, params)
+    # Count by estado
+    counts = {"Abierto":0,"En proceso":0,"Resuelto":0}
+    for r in query("SELECT estado, COUNT(*) as n FROM fallas GROUP BY estado"):
+        counts[r["estado"]] = r["n"]
+    return render_template("fallas.html", rows=rows, equipos=list(CHECKLISTS.keys()),
+                           estados=ESTADOS, urgencias=URGENCIAS, counts=counts,
+                           filtros={"estado":estado_fil,"equipo":equipo_fil})
+
+@app.route("/fallas/nueva", methods=["GET","POST"])
+@login_required
+def falla_nueva():
+    if request.method == "POST":
+        equipo      = request.form.get("equipo","")
+        descripcion = request.form.get("descripcion","").strip()
+        urgencia    = request.form.get("urgencia","Media")
+        foto_data   = None
+        foto_mime   = None
+        if "foto" in request.files:
+            f = request.files["foto"]
+            if f and f.filename:
+                foto_mime = f.mimetype
+                foto_data = base64.b64encode(f.read()).decode("utf-8")
+        fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+        query("""INSERT INTO fallas (equipo,descripcion,urgencia,estado,foto_data,foto_mime,fecha_reporte,usuario_id)
+                 VALUES (?,?,?,'Abierto',?,?,?,?)""",
+              (equipo, descripcion, urgencia, foto_data, foto_mime, fecha, session["user_id"]),
+              commit=True)
+        return redirect(url_for("fallas"))
+    return render_template("falla_nueva.html", equipos=list(CHECKLISTS.keys()), urgencias=URGENCIAS)
+
+@app.route("/fallas/<int:falla_id>")
+@login_required
+def falla_detalle(falla_id):
+    row = query("""SELECT f.*, u.nombre as nombre_reporta,
+                   u2.nombre as nombre_accion
+                   FROM fallas f
+                   JOIN usuarios u ON f.usuario_id=u.id
+                   LEFT JOIN usuarios u2 ON f.usuario_accion_id=u2.id
+                   WHERE f.id=?""", (falla_id,), one=True)
+    if not row: abort(404)
+    return render_template("falla_detalle.html", row=row, estados=ESTADOS, urgencias=URGENCIAS)
+
+@app.route("/fallas/<int:falla_id>/actualizar", methods=["POST"])
+@login_required
+def falla_actualizar(falla_id):
+    estado     = request.form.get("estado","")
+    comentario = request.form.get("comentario","").strip()
+    fecha      = datetime.now().strftime("%Y-%m-%d %H:%M")
+    query("""UPDATE fallas SET estado=?, fecha_actualizacion=?,
+             usuario_accion_id=?, comentario_accion=?
+             WHERE id=?""",
+          (estado, fecha, session["user_id"], comentario, falla_id), commit=True)
+    return redirect(url_for("falla_detalle", falla_id=falla_id))
 
 # ── ADMIN ─────────────────────────────────────────────────────────────────────
 @app.route("/admin/usuarios")
