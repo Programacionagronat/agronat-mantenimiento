@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Fallas — Agronat{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1100px">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1 style="font-size:22px;color:#1C2B3A;margin-bottom:3px">🔴 Tablero de Fallas</h1>
+      <p style="font-size:13px;color:#6c757d">Reportes de problemas en equipos — actuales y pendientes</p>
+    </div>
+    <a href="{{ url_for('falla_nueva') }}" class="btn btn-danger" style="font-size:14px;padding:10px 20px">
+      ＋ Reportar falla
+    </a>
+  </div>
+
+  <!-- Counters -->
+  <div class="grid-3" style="margin-bottom:20px;gap:12px">
+    {% set cnt_colors = {'Abierto': ('#dc3545','#f8d7da'), 'En proceso': ('#fd7e14','#fff3cd'), 'Resuelto': ('#198754','#d1e7dd')} %}
+    {% set cnt_icons  = {'Abierto': '🔴', 'En proceso': '🟡', 'Resuelto': '✅'} %}
+    {% for estado in ['Abierto','En proceso','Resuelto'] %}
+    {% set col = cnt_colors[estado] %}
+    <a href="{{ url_for('fallas', estado=estado) }}" style="text-decoration:none">
+      <div style="background:{{ col[1] }};border:2px solid {{ col[0] }};border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:14px;transition:transform .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+        <div style="font-size:32px">{{ cnt_icons[estado] }}</div>
+        <div>
+          <div style="font-size:28px;font-weight:800;color:{{ col[0] }}">{{ counts[estado] }}</div>
+          <div style="font-size:13px;font-weight:600;color:{{ col[0] }}">{{ estado }}</div>
+        </div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <!-- Filters -->
+  <div class="card" style="padding:14px 20px;margin-bottom:16px">
+    <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px">
+        <label>Estado</label>
+        <select name="estado">
+          <option value="">Todos</option>
+          {% for e in estados %}
+          <option value="{{ e }}" {% if filtros.estado==e %}selected{% endif %}>{{ e }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group" style="margin:0;flex:1;min-width:160px">
+        <label>Equipo</label>
+        <select name="equipo">
+          <option value="">Todos</option>
+          {% for eq in equipos %}
+          <option value="{{ eq }}" {% if filtros.equipo==eq %}selected{% endif %}>{{ eq }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Filtrar</button>
+      <a href="{{ url_for('fallas') }}" class="btn btn-outline">Limpiar</a>
+    </form>
+  </div>
+
+  <!-- Cards de fallas -->
+  {% if rows %}
+  <div style="display:flex;flex-direction:column;gap:12px">
+    {% set urg_colors = {'Alta': ('#dc3545','#f8d7da','🔴'), 'Media': ('#fd7e14','#fff3cd','🟡'), 'Baja': ('#198754','#d1e7dd','🟢')} %}
+    {% set est_colors = {'Abierto': '#dc3545', 'En proceso': '#fd7e14', 'Resuelto': '#198754'} %}
+    {% for r in rows %}
+    {% set uc = urg_colors.get(r.urgencia, ('#6c757d','#f8f9fa','⚪')) %}
+    <a href="{{ url_for('falla_detalle', falla_id=r.id) }}" style="text-decoration:none;color:inherit">
+      <div style="background:white;border-radius:10px;border-left:5px solid {{ uc[0] }};box-shadow:0 1px 6px rgba(0,0,0,.08);padding:16px 20px;display:flex;align-items:center;gap:16px;transition:all .15s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.15)'" onmouseout="this.style.boxShadow='0 1px 6px rgba(0,0,0,.08)'">
+        <!-- Urgencia icon -->
+        <div style="font-size:28px;flex-shrink:0">{{ uc[2] }}</div>
+        <!-- Info -->
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+            <span style="font-weight:700;font-size:15px;color:#1C2B3A">{{ r.equipo }}</span>
+            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:{{ uc[1] }};color:{{ uc[0] }}">{{ r.urgencia }}</span>
+            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:{% if r.estado=='Abierto' %}#f8d7da{% elif r.estado=='En proceso' %}#fff3cd{% else %}#d1e7dd{% endif %};color:{{ est_colors.get(r.estado,'#333') }}">{{ r.estado }}</span>
+          </div>
+          <div style="font-size:13px;color:#333;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.descripcion }}</div>
+          <div style="font-size:11px;color:#aaa">Reportado por <strong>{{ r.nombre_reporta }}</strong> · {{ r.fecha_reporte }}</div>
+        </div>
+        <!-- Foto indicator -->
+        {% if r.foto_data %}
+        <div style="flex-shrink:0;font-size:20px" title="Tiene foto adjunta">📷</div>
+        {% endif %}
+        <!-- Arrow -->
+        <div style="flex-shrink:0;color:#ccc;font-size:18px">›</div>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:60px;color:#aaa">
+    <div style="font-size:48px;margin-bottom:14px">✅</div>
+    <p style="font-size:16px;font-weight:600;color:#555">Sin fallas registradas</p>
+    <p style="font-size:13px">No hay problemas con los filtros seleccionados</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

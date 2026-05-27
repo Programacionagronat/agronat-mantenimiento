@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Reportar Falla — Agronat{% endblock %}
+{% block content %}
+<div class="container" style="max-width:680px">
+
+  <div style="margin-bottom:20px">
+    <a href="{{ url_for('fallas') }}" style="color:#6c757d;font-size:13px;text-decoration:none">← Volver al tablero</a>
+    <h1 style="font-size:22px;color:#1C2B3A;margin-top:6px">Reportar falla o problema</h1>
+    <p style="font-size:13px;color:#6c757d">Completá los datos del problema para que mantenimiento lo vea de inmediato</p>
+  </div>
+
+  <div class="card">
+    <form method="POST" enctype="multipart/form-data">
+
+      <div class="form-group">
+        <label>Equipo con problema *</label>
+        <select name="equipo" required>
+          <option value="">— Seleccioná el equipo —</option>
+          {% for eq in equipos %}
+          <option value="{{ eq }}">{{ eq }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Urgencia *</label>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+          {% for nombre, icon, color, desc in urgencias %}
+          <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;border:2px solid #d0dae5;border-radius:8px;cursor:pointer;transition:border .15s" id="lbl-{{ nombre }}">
+            <input type="radio" name="urgencia" value="{{ nombre }}" required
+                   onchange="highlightUrgencia('{{ nombre }}','{{ color }}')"
+                   {% if nombre == 'Media' %}checked{% endif %}
+                   style="width:18px;height:18px;accent-color:{{ color }}">
+            <span style="font-size:20px">{{ icon }}</span>
+            <div>
+              <div style="font-weight:700;font-size:14px;color:#1C2B3A">{{ nombre }}</div>
+              <div style="font-size:12px;color:#6c757d">{{ desc }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Descripción del problema *</label>
+        <textarea name="descripcion" rows="4" required
+                  placeholder="Describí qué está pasando: ruido anormal, pérdida de aceite, vibración, parada, etc."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Foto del problema (opcional)</label>
+        <div id="foto-drop" style="border:2px dashed #8FAFC8;border-radius:8px;padding:24px;text-align:center;cursor:pointer;background:#F4F8FB;transition:all .15s"
+             onclick="document.getElementById('foto-input').click()"
+             ondragover="event.preventDefault();this.style.borderColor='#2E4A62'"
+             ondragleave="this.style.borderColor='#8FAFC8'"
+             ondrop="handleDrop(event)">
+          <div id="foto-preview" style="display:none;margin-bottom:10px">
+            <img id="foto-img" style="max-height:200px;max-width:100%;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+          </div>
+          <div id="foto-placeholder">
+            <div style="font-size:32px;margin-bottom:6px">📷</div>
+            <div style="font-size:13px;color:#6c757d">Hacé clic o arrastrá una foto aquí</div>
+            <div style="font-size:11px;color:#aaa;margin-top:4px">JPG, PNG — máx. 5MB</div>
+          </div>
+          <input type="file" id="foto-input" name="foto" accept="image/*" capture="environment"
+                 style="display:none" onchange="previewFoto(this)">
+        </div>
+        <button type="button" id="foto-clear" onclick="clearFoto()" style="display:none;margin-top:8px;font-size:12px;color:#dc3545;background:none;border:none;cursor:pointer">✕ Quitar foto</button>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:24px">
+        <button type="submit" class="btn btn-danger" style="flex:1;justify-content:center;padding:12px;font-size:15px">
+          🔴 Enviar reporte
+        </button>
+        <a href="{{ url_for('fallas') }}" class="btn btn-outline" style="padding:12px 20px">Cancelar</a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+function highlightUrgencia(nombre, color) {
+  document.querySelectorAll('[id^="lbl-"]').forEach(l => l.style.borderColor = '#d0dae5');
+  document.getElementById('lbl-' + nombre).style.borderColor = color;
+}
+// Init highlight
+highlightUrgencia('Media', '#fd7e14');
+
+function previewFoto(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('foto-img').src = e.target.result;
+      document.getElementById('foto-preview').style.display = 'block';
+      document.getElementById('foto-placeholder').style.display = 'none';
+      document.getElementById('foto-clear').style.display = 'inline-block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+function clearFoto() {
+  document.getElementById('foto-input').value = '';
+  document.getElementById('foto-preview').style.display = 'none';
+  document.getElementById('foto-placeholder').style.display = 'block';
+  document.getElementById('foto-clear').style.display = 'none';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('foto-drop').style.borderColor = '#8FAFC8';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('foto-input').files = dt.files;
+    previewFoto(document.getElementById('foto-input'));
+  }
+}
+</script>
+{% endblock %}
