@@ -17,107 +17,102 @@ app.secret_key = os.environ.get("SECRET_KEY", "agronat_dev_secret_2026")
 # ── DATABASE ──────────────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
-def get_db():
-    if DATABASE_URL:
-        import psycopg2
-        import psycopg2.extras
-        url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-        conn = psycopg2.connect(url)
-        conn.autocommit = False
-        return conn, "pg"
-    else:
-        import sqlite3
-        os.makedirs("instance", exist_ok=True)
-        conn = sqlite3.connect("instance/agronat.db")
-        conn.row_factory = sqlite3.Row
-        return conn, "sqlite"
+def get_pg_conn():
+    import psycopg2
+    url = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    return psycopg2.connect(url)
 
 def query(sql, params=(), one=False, commit=False):
-    conn, mode = get_db()
-    try:
-        if mode == "pg":
-            import psycopg2.extras
+    if DATABASE_URL:
+        import psycopg2.extras
+        conn = get_pg_conn()
+        try:
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            # Adapt ? to %s for postgres
-            sql_pg = sql.replace("?", "%s")
-            cur.execute(sql_pg, params)
+            cur.execute(sql.replace("?", "%s"), params)
             if commit:
                 conn.commit()
                 return None
             rows = cur.fetchall()
             return (dict(rows[0]) if rows else None) if one else [dict(r) for r in rows]
-        else:
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    else:
+        import sqlite3
+        os.makedirs("instance", exist_ok=True)
+        conn = sqlite3.connect("instance/agronat.db")
+        conn.row_factory = sqlite3.Row
+        try:
             cur = conn.execute(sql, params)
             if commit:
                 conn.commit()
                 return None
             rows = cur.fetchall()
-            if one:
-                return dict(rows[0]) if rows else None
-            return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-def executescript(sql):
-    conn, mode = get_db()
-    try:
-        if mode == "pg":
-            cur = conn.cursor()
-            cur.execute(sql)
-            conn.commit()
-        else:
-            conn.executescript(sql)
-            conn.commit()
-    finally:
-        conn.close()
+            return (dict(rows[0]) if rows else None) if one else [dict(r) for r in rows]
+        finally:
+            conn.close()
 
 def init_db():
     if DATABASE_URL:
-        sql = """
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            nombre TEXT NOT NULL,
-            activo INTEGER DEFAULT 1
-        );
-        CREATE TABLE IF NOT EXISTS registros (
-            id SERIAL PRIMARY KEY,
-            equipo TEXT NOT NULL,
-            frecuencia TEXT NOT NULL,
-            turno TEXT,
-            fecha_registro TEXT NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            datos TEXT NOT NULL,
-            observaciones TEXT
-        );
-        """
+        conn = get_pg_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                nombre TEXT NOT NULL,
+                activo INTEGER DEFAULT 1
+            )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS registros (
+                id SERIAL PRIMARY KEY,
+                equipo TEXT NOT NULL,
+                frecuencia TEXT NOT NULL,
+                turno TEXT,
+                fecha_registro TEXT NOT NULL,
+                usuario_id INTEGER NOT NULL,
+                datos TEXT NOT NULL,
+                observaciones TEXT
+            )""")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
     else:
-        sql = """
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            nombre TEXT NOT NULL,
-            activo INTEGER DEFAULT 1
-        );
-        CREATE TABLE IF NOT EXISTS registros (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            equipo TEXT NOT NULL,
-            frecuencia TEXT NOT NULL,
-            turno TEXT,
-            fecha_registro TEXT NOT NULL,
-            usuario_id INTEGER NOT NULL,
-            datos TEXT NOT NULL,
-            observaciones TEXT
-        );
-        """
-    executescript(sql)
+        import sqlite3
+        os.makedirs("instance", exist_ok=True)
+        conn = sqlite3.connect("instance/agronat.db")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                nombre TEXT NOT NULL,
+                activo INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS registros (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                equipo TEXT NOT NULL,
+                frecuencia TEXT NOT NULL,
+                turno TEXT,
+                fecha_registro TEXT NOT NULL,
+                usuario_id INTEGER NOT NULL,
+                datos TEXT NOT NULL,
+                observaciones TEXT
+            );
+        """)
+        conn.commit()
+        conn.close()
     # Default admin
     existing = query("SELECT id FROM usuarios WHERE username=?", ("admin",), one=True)
     if not existing:
         query("INSERT INTO usuarios (username, password_hash, nombre) VALUES (?,?,?)",
               ("admin", generate_password_hash("agronat2026"), "Administrador"), commit=True)
+
 
 # ── CHECKLISTS DATA ───────────────────────────────────────────────────────────
 CHECKLISTS = {
