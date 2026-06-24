@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Repuestos — Agronat{% endblock %}
+{% block content %}
+<div class="container" style="max-width:1100px">
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h1 style="font-size:22px;color:#1C2B3A;margin-bottom:3px">🔧 Stock de Repuestos</h1>
+      <p style="font-size:13px;color:#6c757d">Gestioná las secciones e items del inventario</p>
+    </div>
+    <button class="btn btn-primary" onclick="document.getElementById('modal-seccion').style.display='flex'">
+      ＋ Nueva sección
+    </button>
+  </div>
+
+  <!-- Alerta de stock bajo -->
+  {% if bajos %}
+  <div style="background:#fff3cd;border:2px solid #ffc107;border-radius:10px;padding:14px 20px;margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-size:22px">⚠️</span>
+      <span style="font-weight:700;font-size:14px;color:#664d03">{{ bajos|length }} repuesto{% if bajos|length != 1 %}s{% endif %} con stock bajo o agotado</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">
+      {% for it in bajos %}
+      <span style="font-size:12px;background:white;padding:4px 10px;border-radius:20px;color:#664d03;border:1px solid #ffe69c">
+        {{ it.descripcion }} {% if it.sku %}({{ it.sku }}){% endif %} — <strong>{{ it.cantidad }}</strong> {% if it.cantidad == 0 %}🔴{% else %}🟡{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Secciones -->
+  {% if secciones %}
+  <div style="display:flex;flex-direction:column;gap:18px">
+    {% for s in secciones %}
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="background:#2E4A62;color:white;padding:12px 20px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-weight:700;font-size:14px">{{ s.nombre }}</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:white" onclick="abrirModalItem({{ s.id }}, '{{ s.nombre }}')">＋ Agregar item</button>
+          {% if not items_por_seccion[s.id] %}
+          <a href="{{ url_for('seccion_eliminar', sec_id=s.id) }}" class="btn btn-sm" style="background:rgba(255,255,255,.15);color:white" onclick="return confirm('¿Eliminar la sección {{ s.nombre }}?')">✕</a>
+          {% endif %}
+        </div>
+      </div>
+      {% set items = items_por_seccion[s.id] %}
+      {% if items %}
+      <table class="tbl" style="margin:0">
+        <thead>
+          <tr>
+            <th style="width:120px">SKU</th>
+            <th>Descripción</th>
+            <th style="width:100px;text-align:center">Cantidad</th>
+            <th style="width:100px;text-align:center">Mínimo</th>
+            <th style="width:90px">Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for it in items %}
+          <tr style="{% if it.cantidad <= it.stock_minimo %}background:#fff3cd{% endif %}">
+            <td style="font-family:monospace;font-size:12px;color:#666">{{ it.sku or '—' }}</td>
+            <td style="font-weight:500">{{ it.descripcion }}</td>
+            <td style="text-align:center">
+              <span style="font-weight:700;font-size:15px;color:{% if it.cantidad == 0 %}#dc3545{% elif it.cantidad <= it.stock_minimo %}#fd7e14{% else %}#198754{% endif %}">
+                {{ it.cantidad }}
+              </span>
+            </td>
+            <td style="text-align:center;color:#aaa;font-size:13px">{{ it.stock_minimo }}</td>
+            <td>
+              <button class="btn btn-outline btn-sm" onclick='abrirModalEditar({{ it.id }}, {{ it.sku|tojson }}, {{ it.descripcion|tojson }}, {{ it.cantidad }}, {{ it.stock_minimo }})'>✏️</button>
+              <a href="{{ url_for('item_eliminar', item_id=it.id) }}" class="btn btn-outline btn-sm" onclick="return confirm('¿Eliminar {{ it.descripcion }}?')">🗑️</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:20px;text-align:center;color:#aaa;font-size:13px">Sin items todavía — agregá el primero</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:60px;color:#aaa">
+    <div style="font-size:48px;margin-bottom:14px">📦</div>
+    <p style="font-size:16px;font-weight:600;color:#555">Todavía no hay secciones creadas</p>
+    <p style="font-size:13px;margin-bottom:16px">Creá una sección (ej: Rulemanes, Correas, Extrusora) para empezar a agregar repuestos</p>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Modal nueva sección -->
+<div id="modal-seccion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:28px;width:360px;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+    <h3 style="color:#1C2B3A;margin-bottom:16px">Nueva sección</h3>
+    <form method="POST" action="{{ url_for('seccion_nueva') }}">
+      <div class="form-group">
+        <label>Nombre de la sección</label>
+        <input type="text" name="nombre" required placeholder="ej: Rulemanes, Correas, Extrusora" autofocus>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center">Crear</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-seccion').style.display='none'">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal nuevo item -->
+<div id="modal-item" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:28px;width:400px;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+    <h3 style="color:#1C2B3A;margin-bottom:4px">Nuevo repuesto</h3>
+    <p style="font-size:12px;color:#6c757d;margin-bottom:16px" id="item-seccion-label"></p>
+    <form method="POST" id="form-item-nuevo" action="{{ url_for('item_nuevo') }}">
+      <input type="hidden" name="seccion_id" id="item-seccion-id">
+      <div class="form-group">
+        <label>SKU (opcional)</label>
+        <input type="text" name="sku" placeholder="ej: RUL-6205">
+      </div>
+      <div class="form-group">
+        <label>Descripción *</label>
+        <input type="text" name="descripcion" required placeholder="ej: Rulemán 6205-2RS">
+      </div>
+      <div class="grid-2" style="gap:12px">
+        <div class="form-group" style="margin:0">
+          <label>Cantidad inicial</label>
+          <input type="number" name="cantidad" min="0" value="0" required>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Stock mínimo</label>
+          <input type="number" name="stock_minimo" min="0" value="1" required>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center">Guardar</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-item').style.display='none'">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal editar item -->
+<div id="modal-editar" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:12px;padding:28px;width:400px;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+    <h3 style="color:#1C2B3A;margin-bottom:16px">Editar repuesto</h3>
+    <form method="POST" id="form-item-editar">
+      <div class="form-group">
+        <label>SKU</label>
+        <input type="text" name="sku" id="edit-sku">
+      </div>
+      <div class="form-group">
+        <label>Descripción *</label>
+        <input type="text" name="descripcion" id="edit-descripcion" required>
+      </div>
+      <div class="grid-2" style="gap:12px">
+        <div class="form-group" style="margin:0">
+          <label>Cantidad</label>
+          <input type="number" name="cantidad" id="edit-cantidad" min="0" required>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Stock mínimo</label>
+          <input type="number" name="stock_minimo" id="edit-stock-minimo" min="0" required>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:18px">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center">Guardar cambios</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('modal-editar').style.display='none'">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function abrirModalItem(seccionId, seccionNombre) {
+  document.getElementById('item-seccion-id').value = seccionId;
+  document.getElementById('item-seccion-label').textContent = 'Sección: ' + seccionNombre;
+  document.getElementById('modal-item').style.display = 'flex';
+}
+function abrirModalEditar(id, sku, descripcion, cantidad, stockMinimo) {
+  document.getElementById('form-item-editar').action = '/repuestos/item/' + id + '/editar';
+  document.getElementById('edit-sku').value = sku || '';
+  document.getElementById('edit-descripcion').value = descripcion;
+  document.getElementById('edit-cantidad').value = cantidad;
+  document.getElementById('edit-stock-minimo').value = stockMinimo;
+  document.getElementById('modal-editar').style.display = 'flex';
+}
+document.querySelectorAll('[id^="modal-"]').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === e.currentTarget) m.style.display = 'none'; });
+});
+</script>
+{% endblock %}
