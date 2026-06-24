@@ -17,7 +17,7 @@
     <div class="grid-2" style="gap:14px">
       <div class="form-group" style="margin:0">
         <label>Fecha</label>
-        <input type="date" id="meta-fecha" value="{{ now_date }}">
+        <input type="date" id="meta-fecha" value="{{ now_date }}" onchange="actualizarFechaGlobal()">
       </div>
       <div style="display:flex;flex-direction:column;justify-content:flex-end">
         <div class="progress-bar"><div class="fill" id="progress-fill" style="width:0%"></div></div>
@@ -26,15 +26,30 @@
     </div>
   </div>
 
+  <!-- Acciones masivas -->
+  <div class="card" style="padding:14px 20px;margin-bottom:12px;background:#F4F8FB;border:1.5px dashed #8FAFC8">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <span style="font-size:13px;color:#2E4A62">💡 Si todo está en orden, marcá todo de una y después corregís lo que falte</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-success btn-sm" onclick="marcarTodasHecho()">
+          ✓ Marcar todas como {% if cl.columnas[0]=='hecho' %}"Hecho"{% else %}"OK"{% endif %}
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="marcarTodasSinRepuesto()">
+          ✓ Marcar todas como "Sin repuesto"
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="padding:0;overflow:hidden">
     <table class="cl-table">
       <thead>
         <tr>
-          <th style="width:42%">TAREA</th>
+          <th style="width:40%">TAREA</th>
           {% for label in cl.col_labels %}
-          <th style="width:{% if cl.columnas[0]=='hecho' %}12%{% else %}8%{% endif %}">{{ label }}</th>
+          <th style="width:{% if cl.columnas[0]=='hecho' %}10%{% else %}8%{% endif %}">{{ label }}</th>
           {% endfor %}
-          <th style="width:16%">REPUESTOS</th>
+          <th style="width:22%">REPUESTOS</th>
           <th>OBSERVACIONES</th>
         </tr>
       </thead>
@@ -45,11 +60,17 @@
           {% if cl.columnas[0] == 'hecho' %}
           <td class="center"><input type="checkbox" data-id="__loto__" data-col="hecho" onchange="update()"></td>
           {% else %}
-          <td class="center"><input type="text" class="date-input" data-id="__loto__" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
+          <td class="center"><input type="hidden" data-id="__loto__" data-col="fecha" class="auto-fecha" value="{{ now_date }}"><span class="fecha-display" style="font-size:11px;color:#aaa">—</span></td>
           <td class="center"><input type="checkbox" data-id="__loto__" data-col="ok" onchange="update()"></td>
           {% endif %}
           <td class="center">
-            <button type="button" class="btn-rep" id="rep-btn-__loto__" onclick="abrirRepuestos('__loto__')">＋ Indicar</button>
+            <div class="rep-cell" id="rep-cell-__loto__">
+              <label class="rep-quick">
+                <input type="checkbox" class="rep-quick-chk" onchange="toggleSinRepuesto('__loto__', this.checked)">
+                <span>Sin repuesto</span>
+              </label>
+              <button type="button" class="btn-rep" id="rep-btn-__loto__" onclick="abrirRepuestos('__loto__')">＋ Usó repuesto</button>
+            </div>
           </td>
           <td><input type="text" class="obs-input" data-id="__loto__" data-col="obs" placeholder="Obligatorio antes de toda tarea" oninput="update()"></td>
         </tr>
@@ -61,11 +82,17 @@
           {% if cl.columnas[0] == 'hecho' %}
           <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="hecho" onchange="update()"></td>
           {% else %}
-          <td class="center"><input type="text" class="date-input" data-id="{{ t.id }}" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
+          <td class="center"><input type="hidden" data-id="{{ t.id }}" data-col="fecha" class="auto-fecha" value="{{ now_date }}"><span class="fecha-display" style="font-size:11px;color:#aaa">—</span></td>
           <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="ok" onchange="update()"></td>
           {% endif %}
           <td class="center">
-            <button type="button" class="btn-rep" id="rep-btn-{{ t.id }}" onclick="abrirRepuestos('{{ t.id }}')">＋ Indicar</button>
+            <div class="rep-cell" id="rep-cell-{{ t.id }}">
+              <label class="rep-quick">
+                <input type="checkbox" class="rep-quick-chk" onchange="toggleSinRepuesto('{{ t.id }}', this.checked)">
+                <span>Sin repuesto</span>
+              </label>
+              <button type="button" class="btn-rep" id="rep-btn-{{ t.id }}" onclick="abrirRepuestos('{{ t.id }}')">＋ Usó repuesto</button>
+            </div>
           </td>
           <td><input type="text" class="obs-input" data-id="{{ t.id }}" data-col="obs" placeholder="{{ t.get('obs','') }}" oninput="update()"></td>
         </tr>
@@ -82,30 +109,17 @@
   <div class="save-bar-pad"></div>
 </div>
 
-<!-- Modal repuestos -->
+<!-- Modal repuestos (solo para indicar que SÍ se usó algo) -->
 <div id="modal-rep" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:center;justify-content:center;padding:16px">
   <div style="background:white;border-radius:12px;padding:24px;width:440px;max-width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.3)">
-    <h3 style="color:#1C2B3A;margin-bottom:4px">¿Se usó algún repuesto?</h3>
+    <h3 style="color:#1C2B3A;margin-bottom:4px">🔧 ¿Qué repuesto se usó?</h3>
     <p style="font-size:12px;color:#6c757d;margin-bottom:16px" id="rep-tarea-label"></p>
 
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:2px solid #d0dae5;border-radius:8px;cursor:pointer" id="rep-lbl-ninguno">
-        <input type="radio" name="rep-modo" value="ninguno" onchange="cambiarModoRep('ninguno')" style="width:18px;height:18px">
-        <span style="font-weight:600;font-size:14px">🚫 No se usó ningún repuesto</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:2px solid #d0dae5;border-radius:8px;cursor:pointer" id="rep-lbl-usado">
-        <input type="radio" name="rep-modo" value="usado" onchange="cambiarModoRep('usado')" style="width:18px;height:18px">
-        <span style="font-weight:600;font-size:14px">🔧 Sí, se usó uno o más repuestos</span>
-      </label>
-    </div>
+    <div id="rep-lista-items" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;border:1px solid #e0e6ed;border-radius:8px;padding:10px"></div>
+    <div id="rep-seleccionados" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+    <a href="{{ url_for('repuestos') }}" target="_blank" style="font-size:12px;color:#2E4A62;display:inline-block;margin-top:8px">＋ No está en la lista — gestionar repuestos</a>
 
-    <div id="rep-selector" style="display:none;margin-bottom:16px">
-      <div id="rep-lista-items" style="display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto;border:1px solid #e0e6ed;border-radius:8px;padding:10px"></div>
-      <div id="rep-seleccionados" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
-      <a href="{{ url_for('repuestos') }}" target="_blank" style="font-size:12px;color:#2E4A62;display:inline-block;margin-top:8px">＋ No está en la lista — gestionar repuestos</a>
-    </div>
-
-    <div style="display:flex;gap:10px;margin-top:8px">
+    <div style="display:flex;gap:10px;margin-top:16px">
       <button type="button" class="btn btn-primary" style="flex:1;justify-content:center" onclick="confirmarRepuestos()">Confirmar</button>
       <button type="button" class="btn btn-outline" onclick="cerrarModalRep()">Cancelar</button>
     </div>
@@ -128,11 +142,15 @@
 <style>
 .btn-rep {
   font-size:11px; padding:6px 10px; border-radius:6px; border:1.5px solid #d0dae5;
-  background:white; color:#2E4A62; cursor:pointer; font-weight:600; transition:all .15s;
+  background:white; color:#2E4A62; cursor:pointer; font-weight:600; transition:all .15s; white-space:nowrap;
 }
 .btn-rep:hover { background:#F4F8FB; border-color:#2E4A62; }
-.btn-rep.is-set { background:#d1e7dd; border-color:#198754; color:#0a3622; }
 .btn-rep.is-set-usado { background:#cff4fc; border-color:#0aa2c0; color:#055160; }
+.rep-cell { display:flex; flex-direction:column; gap:5px; align-items:center; }
+.rep-quick { display:flex; align-items:center; gap:5px; font-size:11px; color:#555; cursor:pointer; user-select:none; }
+.rep-quick input { width:15px; height:15px; cursor:pointer; accent-color:#198754; }
+.rep-cell.is-sin-repuesto { background:#d1e7dd; border-radius:6px; padding:4px; }
+.rep-cell.is-usado .rep-quick { opacity:.4; pointer-events:none; }
 .rep-item-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; cursor:pointer; transition:background .15s; }
 .rep-item-row:hover { background:#F4F8FB; }
 .rep-item-row.selected { background:#cff4fc; }
@@ -144,11 +162,12 @@
 const EQUIPO = {{ equipo|tojson }};
 const FRECUENCIA = {{ frecuencia|tojson }};
 const TOTAL = {{ cl.tareas|length }};
+const TAREA_IDS = [{% for t in cl.tareas %}{{ t.id|tojson }},{% endfor %} {% if cl.get('loto') %}"__loto__"{% endif %}];
 
 // ── Estado de repuestos por tarea ──────────────────────────────────────────
 const repuestosPorTarea = {};   // { tareaId: {modo: 'ninguno'|'usado', items: [{item_id, descripcion, cantidad}]} }
 let tareaActual = null;
-let catalogoRepuestos = null;   // cache de /api/repuestos
+let catalogoRepuestos = null;
 
 function cargarCatalogo() {
   if (catalogoRepuestos) return Promise.resolve(catalogoRepuestos);
@@ -158,6 +177,50 @@ function cargarCatalogo() {
   });
 }
 
+// ── Checkbox rápido "Sin repuesto" ──────────────────────────────────────────
+function toggleSinRepuesto(tareaId, checked) {
+  const cell = document.getElementById('rep-cell-' + tareaId);
+  const btn = document.getElementById('rep-btn-' + tareaId);
+  if (checked) {
+    repuestosPorTarea[tareaId] = { modo: 'ninguno', items: [] };
+    cell.classList.add('is-sin-repuesto');
+    btn.style.display = 'none';
+  } else {
+    delete repuestosPorTarea[tareaId];
+    cell.classList.remove('is-sin-repuesto');
+    btn.style.display = 'inline-block';
+  }
+}
+
+// ── Marcar todas como Hecho/OK ──────────────────────────────────────────────
+const COL_PRINCIPAL = {{ cl.columnas[0]|tojson }};  // 'hecho' o 'fecha' (en cuyo caso usamos 'ok')
+
+function marcarTodasHecho() {
+  const col = COL_PRINCIPAL === 'hecho' ? 'hecho' : 'ok';
+  TAREA_IDS.forEach(id => {
+    const chk = document.querySelector(`[data-id="${id}"][data-col="${col}"]`);
+    if (chk && chk.type === 'checkbox' && !chk.checked) {
+      chk.checked = true;
+    }
+  });
+  update();
+  toast('✓ Todas las tareas marcadas');
+}
+
+function marcarTodasSinRepuesto() {
+  TAREA_IDS.forEach(id => {
+    // No tocar las que ya tienen "usado" indicado
+    if (repuestosPorTarea[id] && repuestosPorTarea[id].modo === 'usado') return;
+    const chk = document.querySelector(`#rep-cell-${id} .rep-quick-chk`);
+    if (chk && !chk.checked) {
+      chk.checked = true;
+      toggleSinRepuesto(id, true);
+    }
+  });
+  toast('✓ Marcadas todas las tareas restantes como "Sin repuesto"');
+}
+
+// ── Modal de selección cuando SÍ se usó repuesto ────────────────────────────
 function abrirRepuestos(tareaId) {
   tareaActual = tareaId;
   const tareaLabel = tareaId === '__loto__' ? 'LOTO' :
@@ -165,42 +228,16 @@ function abrirRepuestos(tareaId) {
   document.getElementById('rep-tarea-label').textContent = 'Tarea: ' + tareaLabel;
 
   const actual = repuestosPorTarea[tareaId];
-  document.querySelectorAll('input[name="rep-modo"]').forEach(r => r.checked = false);
-  document.getElementById('rep-selector').style.display = 'none';
-  document.getElementById('rep-seleccionados').innerHTML = '';
-  window._repSeleccionTmp = [];
+  window._repSeleccionTmp = (actual && actual.modo === 'usado') ? JSON.parse(JSON.stringify(actual.items || [])) : [];
 
-  if (actual) {
-    document.querySelector(`input[name="rep-modo"][value="${actual.modo}"]`).checked = true;
-    highlightModoRep(actual.modo);
-    if (actual.modo === 'usado') {
-      window._repSeleccionTmp = JSON.parse(JSON.stringify(actual.items || []));
-      document.getElementById('rep-selector').style.display = 'block';
-      cargarCatalogo().then(renderListaItems);
-      renderSeleccionados();
-    }
-  }
+  cargarCatalogo().then(renderListaItems);
+  renderSeleccionados();
   document.getElementById('modal-rep').style.display = 'flex';
 }
 
 function cerrarModalRep() {
   document.getElementById('modal-rep').style.display = 'none';
   tareaActual = null;
-}
-
-function highlightModoRep(modo) {
-  document.getElementById('rep-lbl-ninguno').style.borderColor = modo === 'ninguno' ? '#198754' : '#d0dae5';
-  document.getElementById('rep-lbl-usado').style.borderColor = modo === 'usado' ? '#0aa2c0' : '#d0dae5';
-}
-
-function cambiarModoRep(modo) {
-  highlightModoRep(modo);
-  if (modo === 'usado') {
-    document.getElementById('rep-selector').style.display = 'block';
-    cargarCatalogo().then(renderListaItems);
-  } else {
-    document.getElementById('rep-selector').style.display = 'none';
-  }
 }
 
 function renderListaItems(catalogo) {
@@ -301,27 +338,34 @@ function actualizarCantidadRep(idx, val) {
 }
 
 function confirmarRepuestos() {
-  const modoEl = document.querySelector('input[name="rep-modo"]:checked');
-  if (!modoEl) { alert('Elegí una opción: si se usó repuesto o no.'); return; }
-  const modo = modoEl.value;
-  if (modo === 'usado' && (!window._repSeleccionTmp || window._repSeleccionTmp.length === 0)) {
-    alert('Seleccioná al menos un repuesto de la lista.');
+  if (!window._repSeleccionTmp || window._repSeleccionTmp.length === 0) {
+    alert('Seleccioná al menos un repuesto de la lista, o cerrá esta ventana y usá el checkbox "Sin repuesto" si no corresponde.');
     return;
   }
   repuestosPorTarea[tareaActual] = {
-    modo: modo,
-    items: modo === 'usado' ? JSON.parse(JSON.stringify(window._repSeleccionTmp)) : []
+    modo: 'usado',
+    items: JSON.parse(JSON.stringify(window._repSeleccionTmp))
   };
   const btn = document.getElementById('rep-btn-' + tareaActual);
-  if (modo === 'ninguno') {
-    btn.textContent = '✓ Sin repuesto';
-    btn.className = 'btn-rep is-set';
-  } else {
-    const n = window._repSeleccionTmp.length;
-    btn.textContent = `✓ ${n} repuesto${n>1?'s':''}`;
-    btn.className = 'btn-rep is-set-usado';
-  }
+  const cell = document.getElementById('rep-cell-' + tareaActual);
+  const n = window._repSeleccionTmp.length;
+  btn.textContent = `✓ ${n} repuesto${n>1?'s':''}`;
+  btn.className = 'btn-rep is-set-usado';
+  cell.classList.add('is-usado');
+  // Desmarcar "sin repuesto" si estaba tildado
+  const quickChk = cell.querySelector('.rep-quick-chk');
+  if (quickChk) quickChk.checked = false;
+  cell.classList.remove('is-sin-repuesto');
   cerrarModalRep();
+}
+
+// ── Fecha automática ─────────────────────────────────────────────────────────
+function actualizarFechaGlobal() {
+  const fecha = document.getElementById('meta-fecha').value;
+  const [y,m,d] = fecha.split('-');
+  const fechaFmt = `${d}/${m}/${y}`;
+  document.querySelectorAll('.auto-fecha').forEach(el => { el.value = fechaFmt; });
+  document.querySelectorAll('.fecha-display').forEach(el => { el.textContent = fechaFmt; el.style.color = '#555'; });
 }
 
 // ── Resto del formulario ───────────────────────────────────────────────────
@@ -345,7 +389,7 @@ function countCompleted(data) {
     {% if cl.columnas[0] == 'hecho' %}
     if (td.hecho) done++;
     {% else %}
-    if (td.ok || td.fecha) done++;
+    if (td.ok) done++;
     {% endif %}
   }
   {% endfor %}
@@ -383,13 +427,12 @@ function guardar() {
   const faltantes = idsConDatos.filter(id => !repuestosPorTarea[id]);
 
   if (faltantes.length > 0) {
-    toast(`Faltan indicar repuestos en ${faltantes.length} tarea(s) — abrí "＋ Indicar" en cada fila marcada`, '#dc3545');
-    const primerBtn = document.getElementById('rep-btn-' + faltantes[0]);
-    if (primerBtn) primerBtn.scrollIntoView({behavior:'smooth', block:'center'});
+    toast(`Faltan indicar repuestos en ${faltantes.length} tarea(s) — tildá "Sin repuesto" o indicá cuál se usó`, '#dc3545');
+    const primerCell = document.getElementById('rep-cell-' + faltantes[0]);
+    if (primerCell) primerCell.scrollIntoView({behavior:'smooth', block:'center'});
     return;
   }
 
-  // Solo se envían los repuestos de tareas que efectivamente tienen datos
   const repuestosFiltrados = {};
   idsConDatos.forEach(id => { repuestosFiltrados[id] = repuestosPorTarea[id]; });
 
@@ -417,6 +460,7 @@ function guardar() {
 }
 
 document.getElementById('meta-fecha').value = new Date().toISOString().slice(0,10);
+actualizarFechaGlobal();
 document.getElementById('modal-rep').addEventListener('click', e => { if (e.target === e.currentTarget) cerrarModalRep(); });
 </script>
 {% endblock %}
