@@ -15,9 +15,62 @@
   </a>
   {% endif %}
 
+  {% set icons = {
+    'Extrusora': '⚙️',
+    'Prensas de Tornillo': '🔩',
+    'Elevadores de Cangilones': '⬆️',
+    'Sinfines': '🌀',
+    'Bombas de Aceite': '💧',
+    'Enfriador': '❄️',
+    'Prelimpieza': '🧹',
+    'Secadora': '🔥'
+  } %}
+  {% set freq_badges2 = {'Diario':'badge-diario','Semanal':'badge-semanal','Quincenal':'badge-quincenal','Mensual':'badge-mensual','Pre-Zafra':'badge-prezafra'} %}
+
+  {% if pendientes %}
+  <div style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <h2 style="font-size:16px;color:#1C2B3A">📋 Tareas de mantenimiento de hoy</h2>
+      <span style="font-size:12px;background:#2E4A62;color:white;padding:2px 10px;border-radius:20px;font-weight:600">{{ pendientes|length }}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      {% for p in pendientes %}
+      <a href="{{ url_for('formulario', equipo=p.equipo, frecuencia=p.frecuencia) }}" style="text-decoration:none">
+        <div style="background:white;border-radius:8px;border-left:5px solid {% if p.atrasado %}#dc3545{% else %}#2E4A62{% endif %};box-shadow:0 1px 6px rgba(0,0,0,.08);padding:13px 18px;display:flex;align-items:center;gap:14px;transition:all .15s" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,.14)'" onmouseout="this.style.boxShadow='0 1px 6px rgba(0,0,0,.08)'">
+          <span style="font-size:22px">{{ icons.get(p.equipo,'🔧') }}</span>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-weight:700;font-size:14px;color:#1C2B3A">{{ p.equipo }}</span>
+              <span class="badge {{ freq_badges2.get(p.frecuencia,'') }}">{{ p.frecuencia }}</span>
+              {% if p.atrasado %}
+              <span style="font-size:11px;font-weight:700;color:#dc3545;background:#f8d7da;padding:2px 8px;border-radius:20px">⚠ ATRASADO</span>
+              {% endif %}
+            </div>
+            {% if p.ultimo %}
+            <div style="font-size:11px;color:#aaa;margin-top:2px">Último registro: {{ p.ultimo }}</div>
+            {% else %}
+            <div style="font-size:11px;color:#aaa;margin-top:2px">Sin registros anteriores</div>
+            {% endif %}
+          </div>
+          <span style="color:#ccc;font-size:18px">›</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}
+  <div style="background:#d1e7dd;border:2px solid #198754;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:14px">
+    <span style="font-size:26px">✅</span>
+    <div>
+      <div style="font-weight:700;font-size:14px;color:#0a3622">No hay tareas de mantenimiento pendientes hoy</div>
+      <div style="font-size:12px;color:#0a3622">Todos los controles programados están al día</div>
+    </div>
+  </div>
+  {% endif %}
+
   <div style="margin-bottom:20px">
-    <h1 style="font-size:20px;color:#1C2B3A;margin-bottom:4px">Control de Mantenimiento</h1>
-    <p style="color:#6c757d;font-size:13px">Seleccioná el equipo para completar un checklist</p>
+    <h2 style="font-size:16px;color:#1C2B3A;margin-bottom:4px">Todos los equipos</h2>
+    <p style="color:#6c757d;font-size:13px">Accedé manualmente a cualquier checklist cuando lo necesites</p>
   </div>
 
   <div class="grid-3">
