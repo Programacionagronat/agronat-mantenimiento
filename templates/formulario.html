@@ -32,7 +32,7 @@
         <tr>
           <th style="width:42%">TAREA</th>
           {% for label in cl.col_labels %}
-          <th style="width:{% if cl.columnas[0]=='turno_dia' %}9%{% else %}8%{% endif %}">{{ label }}</th>
+          <th style="width:{% if cl.columnas[0]=='hecho' %}12%{% else %}8%{% endif %}">{{ label }}</th>
           {% endfor %}
           <th style="width:16%">REPUESTOS</th>
           <th>OBSERVACIONES</th>
@@ -42,9 +42,8 @@
         {% if cl.get('loto') %}
         <tr class="loto-row">
           <td><span class="tarea-text">⚠ LOTO — cortar térmica + candado personal + tarjeta EN MANTENIMIENTO</span></td>
-          {% if cl.columnas[0] == 'turno_dia' %}
-          <td class="center"><input type="checkbox" data-id="__loto__" data-col="turno_dia" onchange="update()"></td>
-          <td class="center"><input type="checkbox" data-id="__loto__" data-col="turno_noche" onchange="update()"></td>
+          {% if cl.columnas[0] == 'hecho' %}
+          <td class="center"><input type="checkbox" data-id="__loto__" data-col="hecho" onchange="update()"></td>
           {% else %}
           <td class="center"><input type="text" class="date-input" data-id="__loto__" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
           <td class="center"><input type="checkbox" data-id="__loto__" data-col="ok" onchange="update()"></td>
@@ -59,9 +58,8 @@
         {% for t in cl.tareas %}
         <tr>
           <td><span class="tarea-text">{{ t.tarea }}</span></td>
-          {% if cl.columnas[0] == 'turno_dia' %}
-          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="turno_dia" onchange="update()"></td>
-          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="turno_noche" onchange="update()"></td>
+          {% if cl.columnas[0] == 'hecho' %}
+          <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="hecho" onchange="update()"></td>
           {% else %}
           <td class="center"><input type="text" class="date-input" data-id="{{ t.id }}" data-col="fecha" placeholder="dd/mm/aa" oninput="update()"></td>
           <td class="center"><input type="checkbox" data-id="{{ t.id }}" data-col="ok" onchange="update()"></td>
@@ -207,27 +205,47 @@ function cambiarModoRep(modo) {
 
 function renderListaItems(catalogo) {
   const cont = document.getElementById('rep-lista-items');
+  cont.innerHTML = '';
   if (!catalogo || catalogo.length === 0) {
     cont.innerHTML = '<p style="font-size:12px;color:#aaa;text-align:center;padding:12px">No hay repuestos cargados todavía</p>';
     return;
   }
-  let html = '';
   catalogo.forEach(sec => {
-    html += `<div style="font-size:11px;font-weight:700;color:#6c757d;text-transform:uppercase;margin-top:8px;margin-bottom:2px">${sec.seccion}</div>`;
+    const secTitle = document.createElement('div');
+    secTitle.style.cssText = 'font-size:11px;font-weight:700;color:#6c757d;text-transform:uppercase;margin-top:8px;margin-bottom:2px';
+    secTitle.textContent = sec.seccion;
+    cont.appendChild(secTitle);
+
     sec.items.forEach(it => {
       const yaSel = (window._repSeleccionTmp || []).some(s => s.item_id === it.id);
-      html += `
-        <div class="rep-item-row ${yaSel ? 'selected' : ''}" onclick="toggleItemRep(${it.id}, ${JSON.stringify(it.descripcion)}, ${it.cantidad})">
-          <input type="checkbox" ${yaSel ? 'checked' : ''} style="pointer-events:none">
-          <span style="flex:1;font-size:13px">${it.descripcion}${it.sku ? ' <span style=\\'color:#aaa;font-size:11px\\'>('+it.sku+')</span>' : ''}</span>
-          <span style="font-size:11px;color:${it.cantidad === 0 ? '#dc3545' : '#aaa'}">stock: ${it.cantidad}</span>
-        </div>`;
+      const row = document.createElement('div');
+      row.className = 'rep-item-row' + (yaSel ? ' selected' : '');
+
+      const chk = document.createElement('input');
+      chk.type = 'checkbox';
+      chk.checked = yaSel;
+      chk.style.pointerEvents = 'none';
+
+      const span = document.createElement('span');
+      span.style.flex = '1';
+      span.style.fontSize = '13px';
+      span.textContent = it.descripcion + (it.sku ? ' (' + it.sku + ')' : '');
+
+      const stockSpan = document.createElement('span');
+      stockSpan.style.fontSize = '11px';
+      stockSpan.style.color = it.cantidad === 0 ? '#dc3545' : '#aaa';
+      stockSpan.textContent = 'stock: ' + it.cantidad;
+
+      row.appendChild(chk);
+      row.appendChild(span);
+      row.appendChild(stockSpan);
+      row.addEventListener('click', () => toggleItemRep(it.id, it.descripcion));
+      cont.appendChild(row);
     });
   });
-  cont.innerHTML = html;
 }
 
-function toggleItemRep(itemId, descripcion, stockDisponible) {
+function toggleItemRep(itemId, descripcion) {
   window._repSeleccionTmp = window._repSeleccionTmp || [];
   const idx = window._repSeleccionTmp.findIndex(s => s.item_id === itemId);
   if (idx >= 0) {
@@ -241,20 +259,41 @@ function toggleItemRep(itemId, descripcion, stockDisponible) {
 
 function renderSeleccionados() {
   const cont = document.getElementById('rep-seleccionados');
+  cont.innerHTML = '';
   const sel = window._repSeleccionTmp || [];
-  if (sel.length === 0) { cont.innerHTML = ''; return; }
-  let html = '<div style="font-size:11px;font-weight:700;color:#6c757d;text-transform:uppercase;margin-bottom:4px">Seleccionados</div>';
+  if (sel.length === 0) { return; }
+
+  const titulo = document.createElement('div');
+  titulo.style.cssText = 'font-size:11px;font-weight:700;color:#6c757d;text-transform:uppercase;margin-bottom:4px';
+  titulo.textContent = 'Seleccionados';
+  cont.appendChild(titulo);
+
   sel.forEach((s, i) => {
-    html += `
-      <div class="rep-chip">
-        <span>${s.descripcion}</span>
-        <span style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:11px;color:#888">cant.</span>
-          <input type="number" min="1" value="${s.cantidad}" onchange="actualizarCantidadRep(${i}, this.value)">
-        </span>
-      </div>`;
+    const chip = document.createElement('div');
+    chip.className = 'rep-chip';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = s.descripcion;
+
+    const right = document.createElement('span');
+    right.style.cssText = 'display:flex;align-items:center;gap:6px';
+
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:11px;color:#888';
+    label.textContent = 'cant.';
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.value = s.cantidad;
+    input.addEventListener('change', () => actualizarCantidadRep(i, input.value));
+
+    right.appendChild(label);
+    right.appendChild(input);
+    chip.appendChild(nameSpan);
+    chip.appendChild(right);
+    cont.appendChild(chip);
   });
-  cont.innerHTML = html;
 }
 
 function actualizarCantidadRep(idx, val) {
@@ -303,8 +342,8 @@ function countCompleted(data) {
   {% for t in cl.tareas %}
   {
     const td = data['{{ t.id }}'] || {};
-    {% if cl.columnas[0] == 'turno_dia' %}
-    if (td.turno_dia || td.turno_noche) done++;
+    {% if cl.columnas[0] == 'hecho' %}
+    if (td.hecho) done++;
     {% else %}
     if (td.ok || td.fecha) done++;
     {% endif %}
