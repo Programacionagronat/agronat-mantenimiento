@@ -1,5 +1,5 @@
 import os, json, io
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    session, jsonify, send_file, abort)
@@ -13,6 +13,92 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "agronat_dev_secret_2026")
+
+# ── PROGRAMACIÓN DE TAREAS (qué corresponde hoy) ──────────────────────────────
+FREQ_RULES = {
+    "Diario":     {"tipo": "diario_habil"},
+    "Semanal":    {"tipo": "semanal_dia", "dia_semana": 4},   # 4 = viernes (lunes=0)
+    "Quincenal":  {"tipo": "quincenal_dia", "dia_semana": 4},
+    "Mensual":    {"tipo": "primer_habil_mes"},
+    "Pre-Zafra":  {"tipo": "manual"},
+}
+
+def es_habil(fecha):
+    return fecha.weekday() < 5  # lunes(0) a viernes(4)
+
+def primer_habil_del_mes(fecha):
+    d = fecha.replace(day=1)
+    while not es_habil(d):
+        d += timedelta(days=1)
+    return d
+
+def corresponde_hoy(frecuencia, hoy):
+    """Devuelve True si la frecuencia tiene tarea programada para la fecha 'hoy'."""
+    rule = FREQ_RULES.get(frecuencia)
+    if not rule:
+        return False
+    tipo = rule["tipo"]
+    if tipo == "diario_habil":
+        return es_habil(hoy)
+    if tipo == "semanal_dia":
+        return hoy.weekday() == rule["dia_semana"]
+    if tipo == "quincenal_dia":
+        if hoy.weekday() != rule["dia_semana"]:
+            return False
+        return hoy.isocalendar()[1] % 2 == 0
+    if tipo == "primer_habil_mes":
+        return hoy.date() == primer_habil_del_mes(hoy).date()
+    return False  # manual (Pre-Zafra) nunca aparece automático
+
+def ultimo_registro(equipo, frecuencia):
+    row = query("""SELECT fecha_registro FROM registros
+                   WHERE equipo=? AND frecuencia=?
+                   ORDER BY fecha_registro DESC LIMIT 1""",
+                (equipo, frecuencia), one=True)
+    return row["fecha_registro"][:10] if row else None
+
+def calcular_pendientes():
+    """Lista de tareas pendientes: programadas para hoy o atrasadas (no completadas desde su última fecha programada)."""
+    hoy = datetime.now()
+    hoy_str = hoy.strftime("%Y-%m-%d")
+    pendientes = []
+    for equipo, freqs in CHECKLISTS.items():
+        for frecuencia in freqs.keys():
+            if frecuencia == "Pre-Zafra":
+                continue
+            if frecuencia not in FREQ_RULES:
+                continue
+            ultimo = ultimo_registro(equipo, frecuencia)
+            programado_hoy = corresponde_hoy(frecuencia, hoy)
+            ya_hecho_hoy = (ultimo == hoy_str)
+
+            if programado_hoy and not ya_hecho_hoy:
+                pendientes.append({"equipo": equipo, "frecuencia": frecuencia,
+                                   "atrasado": False, "ultimo": ultimo})
+                continue
+
+            if ya_hecho_hoy:
+                continue
+
+            # Buscar hacia atrás (hasta 60 días) la última fecha programada
+            # que sea posterior al último registro; si existe, está atrasado.
+            cur = hoy - timedelta(days=1)
+            encontrado_atraso = False
+            for _ in range(60):
+                cur_str = cur.strftime("%Y-%m-%d")
+                if ultimo and cur_str <= ultimo:
+                    break
+                if corresponde_hoy(frecuencia, cur):
+                    encontrado_atraso = True
+                    break
+                cur -= timedelta(days=1)
+            if encontrado_atraso:
+                pendientes.append({"equipo": equipo, "frecuencia": frecuencia,
+                                   "atrasado": True, "ultimo": ultimo})
+
+    pendientes.sort(key=lambda p: (not p["atrasado"], p["equipo"]))
+    return pendientes
+
 
 # ── DATABASE ──────────────────────────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
@@ -90,6 +176,29 @@ def init_db():
                 usuario_accion_id INTEGER,
                 comentario_accion TEXT
             )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS rep_secciones (
+                id SERIAL PRIMARY KEY,
+                nombre TEXT UNIQUE NOT NULL,
+                orden INTEGER DEFAULT 0
+            )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS rep_items (
+                id SERIAL PRIMARY KEY,
+                seccion_id INTEGER NOT NULL,
+                sku TEXT,
+                descripcion TEXT NOT NULL,
+                cantidad INTEGER NOT NULL DEFAULT 0,
+                stock_minimo INTEGER NOT NULL DEFAULT 1,
+                activo INTEGER DEFAULT 1
+            )""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS rep_movimientos (
+                id SERIAL PRIMARY KEY,
+                item_id INTEGER NOT NULL,
+                cantidad INTEGER NOT NULL,
+                motivo TEXT,
+                registro_id INTEGER,
+                usuario_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL
+            )""")
             conn.commit()
         except Exception:
             conn.rollback()
@@ -131,6 +240,29 @@ def init_db():
                 fecha_actualizacion TEXT,
                 usuario_accion_id INTEGER,
                 comentario_accion TEXT
+            );
+            CREATE TABLE IF NOT EXISTS rep_secciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT UNIQUE NOT NULL,
+                orden INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS rep_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                seccion_id INTEGER NOT NULL,
+                sku TEXT,
+                descripcion TEXT NOT NULL,
+                cantidad INTEGER NOT NULL DEFAULT 0,
+                stock_minimo INTEGER NOT NULL DEFAULT 1,
+                activo INTEGER DEFAULT 1
+            );
+            CREATE TABLE IF NOT EXISTS rep_movimientos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER NOT NULL,
+                cantidad INTEGER NOT NULL,
+                motivo TEXT,
+                registro_id INTEGER,
+                usuario_id INTEGER NOT NULL,
+                fecha TEXT NOT NULL
             );
         """)
         conn.commit()
@@ -634,7 +766,9 @@ def logout():
 def index():
     r = query("SELECT COUNT(*) as n FROM fallas WHERE estado='Abierto'", one=True)
     fallas_count = r["n"] if r else 0
-    return render_template("index.html", equipos=list(CHECKLISTS.keys()), fallas_count=fallas_count)
+    pendientes = calcular_pendientes()
+    return render_template("index.html", equipos=list(CHECKLISTS.keys()),
+                           fallas_count=fallas_count, pendientes=pendientes)
 
 @app.route("/formulario/<equipo>/<frecuencia>")
 @login_required
@@ -649,10 +783,54 @@ def formulario(equipo, frecuencia):
 def guardar():
     d = request.json
     fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
-    query("INSERT INTO registros (equipo,frecuencia,turno,fecha_registro,usuario_id,datos,observaciones) VALUES (?,?,?,?,?,?,?)",
-          (d["equipo"], d["frecuencia"], d.get("turno",""), fecha,
-           session["user_id"], json.dumps(d.get("tareas",{})), d.get("observaciones","")),
-          commit=True)
+
+    # Validación: cada tarea con datos también debe tener indicación de repuesto
+    tareas = d.get("tareas", {})
+    repuestos_por_tarea = d.get("repuestos", {})
+    for tarea_id in tareas.keys():
+        marca = repuestos_por_tarea.get(tarea_id)
+        if not marca or marca.get("modo") not in ("ninguno", "usado"):
+            return jsonify({"ok": False, "error": f"Falta indicar uso de repuestos en una tarea"}), 400
+        if marca.get("modo") == "usado" and not marca.get("items"):
+            return jsonify({"ok": False, "error": "Falta seleccionar el repuesto usado"}), 400
+
+    if DATABASE_URL:
+        conn = get_pg_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("""INSERT INTO registros (equipo,frecuencia,turno,fecha_registro,usuario_id,datos,observaciones)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING id""",
+                        (d["equipo"], d["frecuencia"], d.get("turno",""), fecha,
+                         session["user_id"], json.dumps(tareas), d.get("observaciones","")))
+            registro_id = cur.fetchone()[0]
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    else:
+        import sqlite3
+        conn = sqlite3.connect("instance/agronat.db")
+        try:
+            cur = conn.execute("""INSERT INTO registros (equipo,frecuencia,turno,fecha_registro,usuario_id,datos,observaciones)
+                                  VALUES (?,?,?,?,?,?,?)""",
+                               (d["equipo"], d["frecuencia"], d.get("turno",""), fecha,
+                                session["user_id"], json.dumps(tareas), d.get("observaciones","")))
+            registro_id = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+
+    # Descontar stock de los repuestos usados
+    usos = []
+    for tarea_id, marca in repuestos_por_tarea.items():
+        if marca.get("modo") == "usado":
+            for it in marca.get("items", []):
+                usos.append({"item_id": it.get("item_id"), "cantidad": it.get("cantidad", 1)})
+    if usos:
+        descontar_stock(usos, registro_id, session["user_id"])
+
     return jsonify({"ok": True})
 
 @app.route("/historial")
@@ -712,7 +890,7 @@ def generar_pdf(row, cl, datos):
     buf=io.BytesIO()
     doc=SimpleDocTemplate(buf,pagesize=A4,leftMargin=MARGIN,rightMargin=MARGIN,topMargin=MARGIN,bottomMargin=MARGIN)
     story=[]
-    meta=Table([[P(f"Fecha: {row['fecha_registro'][:10]}","tr")],[P(f"Turno: {row['turno'] or '—'}","tr")],[P(f"Responsable: {row['nombre']}","tr")]],colWidths=[5.0*cm],rowHeights=[0.42*cm]*3)
+    meta=Table([[P(f"Fecha: {row['fecha_registro'][:10]}","tr")],[P(f"Responsable: {row['nombre']}","tr")]],colWidths=[5.0*cm],rowHeights=[0.42*cm]*2)
     meta.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_DARK),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
     centro=Table([[P(row["equipo"],"tc")],[P(row["frecuencia"],"hsec")],[P(cl["subtitulo"],"tsub")]],colWidths=[9.0*cm],rowHeights=[0.5*cm,0.42*cm,0.35*cm])
     centro.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_DARK),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
@@ -830,6 +1008,108 @@ def falla_actualizar(falla_id):
              WHERE id=?""",
           (estado, fecha, session["user_id"], comentario, falla_id), commit=True)
     return redirect(url_for("falla_detalle", falla_id=falla_id))
+
+# ── REPUESTOS ────────────────────────────────────────────────────────────────
+@app.route("/repuestos")
+@login_required
+def repuestos():
+    secciones = query("SELECT * FROM rep_secciones ORDER BY orden, nombre")
+    items_por_seccion = {}
+    bajos = []
+    for s in secciones:
+        items = query("SELECT * FROM rep_items WHERE seccion_id=? AND activo=1 ORDER BY descripcion", (s["id"],))
+        items_por_seccion[s["id"]] = items
+        for it in items:
+            if it["cantidad"] <= it["stock_minimo"]:
+                bajos.append(it)
+    return render_template("repuestos.html", secciones=secciones,
+                           items_por_seccion=items_por_seccion, bajos=bajos)
+
+@app.route("/repuestos/seccion/nueva", methods=["POST"])
+@login_required
+def seccion_nueva():
+    nombre = request.form.get("nombre","").strip()
+    if nombre:
+        try:
+            maxo = query("SELECT COALESCE(MAX(orden),0) as m FROM rep_secciones", one=True)
+            query("INSERT INTO rep_secciones (nombre, orden) VALUES (?,?)",
+                  (nombre, (maxo["m"] or 0) + 1), commit=True)
+        except Exception:
+            pass
+    return redirect(url_for("repuestos"))
+
+@app.route("/repuestos/seccion/<int:sec_id>/eliminar")
+@login_required
+def seccion_eliminar(sec_id):
+    restantes = query("SELECT COUNT(*) as n FROM rep_items WHERE seccion_id=? AND activo=1", (sec_id,), one=True)
+    if restantes and restantes["n"] > 0:
+        return redirect(url_for("repuestos"))
+    query("DELETE FROM rep_secciones WHERE id=?", (sec_id,), commit=True)
+    return redirect(url_for("repuestos"))
+
+@app.route("/repuestos/item/nuevo", methods=["POST"])
+@login_required
+def item_nuevo():
+    seccion_id = request.form.get("seccion_id")
+    sku = request.form.get("sku","").strip()
+    descripcion = request.form.get("descripcion","").strip()
+    cantidad = request.form.get("cantidad","0")
+    stock_minimo = request.form.get("stock_minimo","1")
+    if seccion_id and descripcion:
+        try:
+            query("""INSERT INTO rep_items (seccion_id,sku,descripcion,cantidad,stock_minimo)
+                     VALUES (?,?,?,?,?)""",
+                  (seccion_id, sku, descripcion, int(cantidad or 0), int(stock_minimo or 1)),
+                  commit=True)
+        except Exception:
+            pass
+    return redirect(url_for("repuestos"))
+
+@app.route("/repuestos/item/<int:item_id>/editar", methods=["POST"])
+@login_required
+def item_editar(item_id):
+    sku = request.form.get("sku","").strip()
+    descripcion = request.form.get("descripcion","").strip()
+    cantidad = request.form.get("cantidad","0")
+    stock_minimo = request.form.get("stock_minimo","1")
+    query("""UPDATE rep_items SET sku=?, descripcion=?, cantidad=?, stock_minimo=? WHERE id=?""",
+          (sku, descripcion, int(cantidad or 0), int(stock_minimo or 1), item_id), commit=True)
+    return redirect(url_for("repuestos"))
+
+@app.route("/repuestos/item/<int:item_id>/eliminar")
+@login_required
+def item_eliminar(item_id):
+    query("UPDATE rep_items SET activo=0 WHERE id=?", (item_id,), commit=True)
+    return redirect(url_for("repuestos"))
+
+@app.route("/api/repuestos")
+@login_required
+def api_repuestos():
+    """Lista plana de repuestos activos, agrupados por sección, para el selector del checklist."""
+    secciones = query("SELECT * FROM rep_secciones ORDER BY orden, nombre")
+    result = []
+    for s in secciones:
+        items = query("SELECT id, sku, descripcion, cantidad FROM rep_items WHERE seccion_id=? AND activo=1 ORDER BY descripcion", (s["id"],))
+        if items:
+            result.append({"seccion": s["nombre"], "items": items})
+    return jsonify(result)
+
+def descontar_stock(usos, registro_id, usuario_id):
+    """usos: lista de dicts {item_id, cantidad}. Descuenta stock y registra movimiento."""
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+    for u in usos:
+        item_id = u.get("item_id")
+        cant = int(u.get("cantidad", 1) or 1)
+        if not item_id or cant <= 0:
+            continue
+        item = query("SELECT cantidad FROM rep_items WHERE id=?", (item_id,), one=True)
+        if not item:
+            continue
+        nueva = max(0, item["cantidad"] - cant)
+        query("UPDATE rep_items SET cantidad=? WHERE id=?", (nueva, item_id), commit=True)
+        query("""INSERT INTO rep_movimientos (item_id, cantidad, motivo, registro_id, usuario_id, fecha)
+                 VALUES (?,?,?,?,?,?)""",
+              (item_id, -cant, "Uso en mantenimiento", registro_id, usuario_id, fecha), commit=True)
 
 # ── ADMIN ─────────────────────────────────────────────────────────────────────
 @app.route("/admin/usuarios")
