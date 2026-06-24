@@ -279,7 +279,7 @@ CHECKLISTS = {
     "Extrusora": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia", "turno_noche"], "col_labels": ["Turno Día", "Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"e_d_01","tarea":"Inspección visual general — estado exterior, paneles y accesos"},
                 {"id":"e_d_02","tarea":"Nivel de aceite — caja de engranajes y reductor principal","obs":"Registrar en visor"},
@@ -349,7 +349,7 @@ CHECKLISTS = {
     "Prensas de Tornillo": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"p_d_01","tarea":"Inspección visual general — estado exterior y paneles"},
                 {"id":"p_d_02","tarea":"Nivel de aceite de caja de engranajes — visor / varilla"},
@@ -404,7 +404,7 @@ CHECKLISTS = {
     "Elevadores de Cangilones": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"el_d_01","tarea":"Inspección visual general — carcasa, tapas de inspección y accesos"},
                 {"id":"el_d_02","tarea":"Ruidos anormales en banda, cangilones o tambores"},
@@ -471,7 +471,7 @@ CHECKLISTS = {
     "Sinfines": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"sf_d_01","tarea":"Inspección visual general — carcasa, tapas y soportes"},
                 {"id":"sf_d_02","tarea":"Ruidos anormales en tornillo, rodamientos o transmisión"},
@@ -514,7 +514,7 @@ CHECKLISTS = {
     "Bombas de Aceite": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"b_d_01","tarea":"Inspección visual general — estado exterior, bridas y conexiones"},
                 {"id":"b_d_02","tarea":"Revisión visual de posibles pérdidas de aceite en cuerpo y bridas"},
@@ -563,7 +563,7 @@ CHECKLISTS = {
     "Enfriador": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"en_d_01","tarea":"Inspección visual general — estado exterior y paneles de acceso"},
                 {"id":"en_d_02","tarea":"Temperatura de entrada y salida del producto — registrar valores"},
@@ -608,7 +608,7 @@ CHECKLISTS = {
     "Prelimpieza": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"pl_d_01","tarea":"Inspección visual general — estado exterior de zaranda y ciclones"},
                 {"id":"pl_d_02","tarea":"Ruidos anormales en vibrador, motor o estructura"},
@@ -655,7 +655,7 @@ CHECKLISTS = {
     "Secadora": {
         "Diario": {
             "subtitulo": "Completar al inicio de cada turno (cada 8 hs)",
-            "columnas": ["turno_dia","turno_noche"], "col_labels": ["Turno Día","Turno Noche"],
+            "columnas": ["hecho"], "col_labels": ["Hecho"],
             "tareas": [
                 {"id":"sc_d_01","tarea":"Inspección visual general — exterior de la máquina, paneles y accesos"},
                 {"id":"sc_d_02","tarea":"Temperatura de cámara de secado — registrar valor en °C"},
@@ -897,25 +897,26 @@ def generar_pdf(row, cl, datos):
     hdr=Table([[P("AGRONAT S.A.","tl"),centro,meta]],colWidths=[4.2*cm,9.0*cm,5.0*cm],rowHeights=[1.45*cm])
     hdr.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_DARK),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(0,0),10),("RIGHTPADDING",(2,0),(2,0),8),("BOX",(0,0),(-1,-1),1,C_DARK)]))
     story.append(hdr); story.append(Spacer(1,0.35*cm))
-    is_d=cl["columnas"][0]=="turno_dia"
-    col_w=[9.6*cm,2.2*cm,2.4*cm,4.0*cm] if is_d else [9.8*cm,2.0*cm,1.5*cm,4.9*cm]
-    hdrs=["TAREA","TURNO DÍA","TURNO NOCHE","OBSERVACIONES"] if is_d else ["TAREA","FECHA","OK","OBSERVACIONES"]
+    is_d=cl["columnas"][0]=="hecho"
+    col_w=[10.8*cm,2.2*cm,5.2*cm] if is_d else [9.8*cm,2.0*cm,1.5*cm,4.9*cm]
+    hdrs=["TAREA","HECHO","OBSERVACIONES"] if is_d else ["TAREA","FECHA","OK","OBSERVACIONES"]
     ch=Table([[P(h,"hcol") for h in hdrs]],colWidths=col_w)
     ch.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_LIGHT),("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("FONTNAME",(0,0),(-1,-1),"Helvetica-Bold"),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR)]))
     story.append(ch)
     if cl.get("loto"):
-        lt=Table([[P("⚠ LOTO — cortar térmica + candado personal + tarjeta EN MANTENIMIENTO","loto"),P("/ /","ctr"),P("✓","ctr"),P("Obligatorio antes de toda tarea","task")]],colWidths=col_w)
-        lt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_LOTO),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("ALIGN",(1,0),(2,0),"CENTER")]))
+        loto_cells = [P("⚠ LOTO — cortar térmica + candado personal + tarjeta EN MANTENIMIENTO","loto"),P("✓","ctr"),P("Obligatorio antes de toda tarea","task")] if is_d else [P("⚠ LOTO — cortar térmica + candado personal + tarjeta EN MANTENIMIENTO","loto"),P("/ /","ctr"),P("✓","ctr"),P("Obligatorio antes de toda tarea","task")]
+        lt=Table([loto_cells],colWidths=col_w)
+        lt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_LOTO),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("ALIGN",(1,0),(-2,0),"CENTER")]))
         story.append(lt)
     for i,t in enumerate(cl["tareas"]):
         td=datos.get(t["id"],{})
         obs_hint=t.get("obs","")
         if is_d:
-            cells=[P(t["tarea"]),P("✓" if td.get("turno_dia") else "—","ctr"),P("✓" if td.get("turno_noche") else "—","ctr"),P(td.get("obs",obs_hint) or "")]
+            cells=[P(t["tarea"]),P("✓" if td.get("hecho") else "—","ctr"),P(td.get("obs",obs_hint) or "")]
         else:
             cells=[P(t["tarea"]),P(td.get("fecha","") or "","ctr"),P("✓" if td.get("ok") else "—","ctr"),P(td.get("obs",obs_hint) or "")]
         rt=Table([cells],colWidths=col_w)
-        rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_ALT if i%2==0 else colors.white),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("ALIGN",(1,0),(2,0),"CENTER")]))
+        rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_ALT if i%2==0 else colors.white),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("ALIGN",(1,0),(-2,0),"CENTER")]))
         story.append(rt)
     story.append(Spacer(1,0.4*cm))
     oh=Table([[P("OBSERVACIONES","hsec")]],colWidths=[CW])
