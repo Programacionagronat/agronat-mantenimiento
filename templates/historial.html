@@ -11,7 +11,6 @@
     <a href="{{ url_for('index') }}" class="btn btn-outline">← Volver al inicio</a>
   </div>
 
-  <!-- Filtros -->
   <div class="card" style="padding:18px 24px;margin-bottom:16px">
     <form method="GET" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
       <div class="form-group" style="margin:0;flex:1;min-width:160px">
@@ -45,7 +44,6 @@
     </form>
   </div>
 
-  <!-- Tabla -->
   <div class="card" style="padding:0;overflow:hidden">
     {% if rows %}
     <table class="tbl">
@@ -54,7 +52,6 @@
           <th>#</th>
           <th>Equipo</th>
           <th>Frecuencia</th>
-          <th>Turno</th>
           <th>Fecha y hora</th>
           <th>Responsable</th>
           <th>Observaciones</th>
@@ -68,14 +65,13 @@
           <td style="color:#aaa;font-size:12px">{{ r.id }}</td>
           <td style="font-weight:600;color:#1C2B3A">{{ r.equipo }}</td>
           <td><span class="badge {{ freq_badges.get(r.frecuencia,'') }}">{{ r.frecuencia }}</span></td>
-          <td style="color:#555">{{ r.turno or '—' }}</td>
           <td style="font-size:13px;color:#555">{{ r.fecha_registro }}</td>
           <td style="font-size:13px">{{ r.nombre }}</td>
           <td style="font-size:12px;color:#666;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             {{ r.observaciones or '—' }}
           </td>
           <td>
-            <a href="{{ url_for('exportar', reg_id=r.id) }}" class="btn btn-outline btn-sm" title="Descargar PDF">
+            <a href="{{ url_for('exportar', reg_id=r.id) }}" class="btn btn-outline btn-sm" title="Descargar PDF" target="_blank" rel="noopener">
               📄 PDF
             </a>
           </td>
