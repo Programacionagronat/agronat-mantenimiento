@@ -794,6 +794,18 @@ def guardar():
         if marca.get("modo") == "usado" and not marca.get("items"):
             return jsonify({"ok": False, "error": "Falta seleccionar el repuesto usado"}), 400
 
+    # Incrustar info de repuestos dentro de cada tarea para que quede en el PDF exportado
+    for tarea_id, marca in repuestos_por_tarea.items():
+        if tarea_id in tareas:
+            if marca.get("modo") == "usado":
+                tareas[tarea_id]["repuestos"] = [
+                    {"descripcion": it.get("descripcion",""), "cantidad": it.get("cantidad",1)}
+                    for it in marca.get("items", [])
+                ]
+            else:
+                tareas[tarea_id]["repuestos"] = []
+
+
     if DATABASE_URL:
         conn = get_pg_conn()
         try:
@@ -833,6 +845,26 @@ def guardar():
 
     return jsonify({"ok": True})
 
+@app.route("/liberar", methods=["POST"])
+@login_required
+def liberar():
+    """Solo admin: marca una tarea pendiente como completada sin llenar el formulario (modo prueba)."""
+    if session.get("username") != "admin":
+        abort(403)
+    d = request.json
+    equipo = d.get("equipo")
+    frecuencia = d.get("frecuencia")
+    if not equipo or not frecuencia or equipo not in CHECKLISTS or frecuencia not in CHECKLISTS[equipo]:
+        return jsonify({"ok": False, "error": "Equipo o frecuencia inválida"}), 400
+
+    fecha = datetime.now().strftime("%Y-%m-%d %H:%M")
+    obs = "⚡ Liberada por administrador (sin completar checklist) — modo prueba"
+    query("""INSERT INTO registros (equipo,frecuencia,turno,fecha_registro,usuario_id,datos,observaciones)
+             VALUES (?,?,?,?,?,?,?)""",
+          (equipo, frecuencia, "", fecha, session["user_id"], json.dumps({}), obs),
+          commit=True)
+    return jsonify({"ok": True})
+
 @app.route("/historial")
 @login_required
 def historial():
@@ -870,6 +902,12 @@ def exportar(reg_id):
 
 # ── PDF ───────────────────────────────────────────────────────────────────────
 def generar_pdf(row, cl, datos):
+    # Repuestos usados en este registro (vía tabla de movimientos)
+    movs = query("""SELECT m.cantidad, i.descripcion, i.sku
+                    FROM rep_movimientos m JOIN rep_items i ON m.item_id=i.id
+                    WHERE m.registro_id=?""", (row["id"],))
+    repuestos_usados = [{"descripcion": m["descripcion"], "sku": m["sku"], "cantidad": -m["cantidad"]} for m in movs]
+
     C_DARK=colors.HexColor("#1C2B3A"); C_MED=colors.HexColor("#2E4A62")
     C_LIGHT=colors.HexColor("#D6E4F0"); C_ALT=colors.HexColor("#F4F8FB")
     C_BDR=colors.HexColor("#8FAFC8"); C_LOTO=colors.HexColor("#FFF3CD")
@@ -911,22 +949,54 @@ def generar_pdf(row, cl, datos):
     for i,t in enumerate(cl["tareas"]):
         td=datos.get(t["id"],{})
         obs_hint=t.get("obs","")
+        obs_txt = td.get("obs", obs_hint) or ""
+        reps_tarea = td.get("repuestos")
+        if reps_tarea:
+            reps_str = ", ".join(f"{r['descripcion']} x{r['cantidad']}" for r in reps_tarea)
+            obs_txt = (obs_txt + " — " if obs_txt else "") + f"[Repuesto usado: {reps_str}]"
         if is_d:
-            cells=[P(t["tarea"]),P("✓" if td.get("hecho") else "—","ctr"),P(td.get("obs",obs_hint) or "")]
+            cells=[P(t["tarea"]),P("✓" if td.get("hecho") else "—","ctr"),P(obs_txt)]
         else:
-            cells=[P(t["tarea"]),P(td.get("fecha","") or "","ctr"),P("✓" if td.get("ok") else "—","ctr"),P(td.get("obs",obs_hint) or "")]
+            cells=[P(t["tarea"]),P(td.get("fecha","") or "","ctr"),P("✓" if td.get("ok") else "—","ctr"),P(obs_txt)]
         rt=Table([cells],colWidths=col_w)
         rt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_ALT if i%2==0 else colors.white),("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"TOP"),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),("ALIGN",(1,0),(-2,0),"CENTER")]))
         story.append(rt)
     story.append(Spacer(1,0.4*cm))
+
+    # ── Bloque REPUESTOS UTILIZADOS ──
+    rh=Table([[P("REPUESTOS UTILIZADOS","hsec")]],colWidths=[CW])
+    rh.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_MED),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),8),("BOX",(0,0),(-1,-1),0.5,C_BDR)]))
+    story.append(rh)
+    if repuestos_usados:
+        rep_rows = []
+        for r in repuestos_usados:
+            desc = r["descripcion"] + (f" ({r['sku']})" if r["sku"] else "")
+            rep_rows.append([P(desc), P(str(r["cantidad"]), "ctr")])
+        rep_w = [CW-2.5*cm, 2.5*cm]
+        rep_t = Table([[P("REPUESTO","hcol"),P("CANT.","hcol")]] + rep_rows, colWidths=rep_w)
+        style = [("BACKGROUND",(0,0),(-1,0),C_LIGHT),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),
+                 ("ALIGN",(0,0),(-1,-1),"CENTER"),("ALIGN",(0,1),(0,-1),"LEFT"),
+                 ("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),
+                 ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4)]
+        for i in range(1, len(rep_rows)+1):
+            style.append(("BACKGROUND",(0,i),(-1,i), C_ALT if i%2==1 else colors.white))
+        rep_t.setStyle(TableStyle(style))
+        story.append(rep_t)
+    else:
+        no_rep = Table([[P("No se utilizaron repuestos en este mantenimiento.")]],colWidths=[CW],rowHeights=[0.6*cm])
+        no_rep.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,C_BDR),("BACKGROUND",(0,0),(-1,-1),colors.white),("TOPPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),6)]))
+        story.append(no_rep)
+    story.append(Spacer(1,0.4*cm))
+
     oh=Table([[P("OBSERVACIONES","hsec")]],colWidths=[CW])
     oh.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),C_MED),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),8),("BOX",(0,0),(-1,-1),0.5,C_BDR)]))
     story.append(oh)
+
     ot=Table([[P(row["observaciones"] or "")]],colWidths=[CW],rowHeights=[max(1.5*cm,0.6*cm)])
     ot.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,C_BDR),("BACKGROUND",(0,0),(-1,-1),colors.white),("TOPPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),6)]))
     story.append(ot); story.append(Spacer(1,0.45*cm))
     cw2=CW/3
-    ft=Table([[P(f"RESPONSABLE\n\n{row['nombre']}","firma"),P("TURNO NOCHE\n\n______________________________","firma"),P("ENCARGADO DE MANTENIMIENTO\n\n______________________________","firma")]],colWidths=[cw2]*3,rowHeights=[1.6*cm])
+    ft=Table([[P(f"RESPONSABLE\n\n{row['nombre']}","firma"),P("SUPERVISOR\n\n______________________________","firma"),P("ENCARGADO DE MANTENIMIENTO\n\n______________________________","firma")]],colWidths=[cw2]*3,rowHeights=[1.6*cm])
     ft.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.5,C_BDR),("INNERGRID",(0,0),(-1,-1),0.3,C_BDR),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),("BACKGROUND",(0,0),(-1,-1),C_ALT),("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6)]))
     story.append(ft)
     doc.build(story); buf.seek(0); return buf
